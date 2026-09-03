@@ -193,8 +193,8 @@ fn keyboard_sweep() -> (f64, f64, f64) {
 
     println!("\nACROSS THE KEYBOARD  (simulated spinet, 65 dB noise floor)");
     println!(
-        "  {:>5} {:>9} {:>10} {:>10} {:>9} {:>8} {:>5} {:>6}  {}",
-        "note", "f0", "B true", "B found", "f0 err", "B err", "used", "ms", "concerns"
+        "  {:>5} {:>9} {:>10} {:>10} {:>9} {:>8} {:>5} {:>6}  concerns",
+        "note", "f0", "B true", "B found", "f0 err", "B err", "used", "ms"
     );
 
     let notes: &[(&str, f64, f64)] = &[
