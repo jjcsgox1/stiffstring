@@ -9,6 +9,7 @@
 //! - [`estimate`] measures them, to a precision the FFT cannot reach, by
 //!   watching phase rather than magnitude.
 
+pub mod curve;
 pub mod estimate;
 pub mod fft;
 pub mod inharmonicity;
