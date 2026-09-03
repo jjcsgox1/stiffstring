@@ -143,6 +143,28 @@ pub fn coarse_peaks(
     peaks
 }
 
+/// A robust estimate of the noise floor, as a per-bin amplitude.
+///
+/// The median works because the overwhelming majority of bins in any real
+/// spectrum hold nothing but noise — a piano note occupies a few dozen bins out
+/// of thousands — so the middle of the distribution is the floor, unmoved by how
+/// loud the note itself is.
+///
+/// Callers use it to decide what is worth calling a partial. Without a threshold
+/// like this, a peak finder will happily return the loudest bumps in the noise
+/// and a fitter will then have to reject them, which is a slower and less honest
+/// way of reaching the same conclusion.
+pub fn noise_floor(samples: &[f32]) -> f64 {
+    let n = floor_pow2(samples.len());
+    if n < 64 {
+        return 0.0;
+    }
+    let w = window(Window::BlackmanHarris, n);
+    let mut amps = amplitudes(&spectrum(&samples[..n], &w), &w);
+    amps.sort_by(f64::total_cmp);
+    amps[amps.len() / 2]
+}
+
 /// Pin down one partial near `approx_hz` by fitting a line to its phase.
 ///
 /// `approx_hz` must be within half the wrap limit of the truth — see
@@ -178,6 +200,7 @@ pub fn refine(
     // slope is the frequency error.
     let mut times = Vec::with_capacity(cfg.frames);
     let mut residuals = Vec::with_capacity(cfg.frames);
+    let mut frame_amps = Vec::with_capacity(cfg.frames);
     let mut amplitude_sum = 0.0;
     let mut previous = 0.0;
 
@@ -190,7 +213,7 @@ pub fn refine(
         // Interpolate across the peak rather than trusting one bin: a partial
         // between bins under-reads by up to 0.8 dB otherwise, making a partial's
         // apparent strength depend on where it happened to fall.
-        amplitude_sum += if k >= 1 && k + 1 < n / 2 {
+        let amp = if k >= 1 && k + 1 < n / 2 {
             parabolic_peak(
                 spec[k - 1].abs() * scale,
                 c.abs() * scale,
@@ -200,6 +223,8 @@ pub fn refine(
         } else {
             c.abs() * scale
         };
+        amplitude_sum += amp;
+        frame_amps.push(amp);
 
         let t = start as f64 / sample_rate;
         let expected = TAU * approx_hz * t;
@@ -217,15 +242,29 @@ pub fn refine(
         residuals.push(r);
     }
 
-    // Least squares through (t, phase residual).
-    let m = cfg.frames as f64;
-    let mean_t = times.iter().sum::<f64>() / m;
-    let mean_r = residuals.iter().sum::<f64>() / m;
+    // Least squares through (t, phase residual), weighted by each frame's
+    // amplitude squared.
+    //
+    // This matters most in the treble, where partials die within half a second:
+    // the later frames are then reading phase out of noise, and weighting every
+    // frame alike would let those measurements degrade a fit the early frames
+    // had already settled. Phase variance goes as the inverse square of
+    // amplitude, so amplitude squared is the statistically right weight, and it
+    // shortens the effective observation window exactly as far as the note's own
+    // decay demands — no register-specific special casing needed.
+    let weights: Vec<f64> = frame_amps.iter().map(|a| a * a).collect();
+    let wsum: f64 = weights.iter().sum();
+    if wsum <= 0.0 {
+        return None;
+    }
+    let mean_t = times.iter().zip(&weights).map(|(t, w)| t * w).sum::<f64>() / wsum;
+    let mean_r = residuals.iter().zip(&weights).map(|(r, w)| r * w).sum::<f64>() / wsum;
+
     let mut sxy = 0.0;
     let mut sxx = 0.0;
-    for (t, r) in times.iter().zip(&residuals) {
-        sxy += (t - mean_t) * (r - mean_r);
-        sxx += (t - mean_t) * (t - mean_t);
+    for ((t, r), w) in times.iter().zip(&residuals).zip(&weights) {
+        sxy += w * (t - mean_t) * (r - mean_r);
+        sxx += w * (t - mean_t) * (t - mean_t);
     }
     if sxx <= 0.0 {
         return None;
@@ -234,15 +273,15 @@ pub fn refine(
     let intercept = mean_r - slope * mean_t;
 
     let mut sse = 0.0;
-    for (t, r) in times.iter().zip(&residuals) {
+    for ((t, r), w) in times.iter().zip(&residuals).zip(&weights) {
         let e = r - (intercept + slope * t);
-        sse += e * e;
+        sse += w * e * e;
     }
-    let phase_residual = (sse / m).sqrt();
+    let phase_residual = (sse / wsum).sqrt();
 
     Some(Refined {
         hz: approx_hz + slope / TAU,
-        amplitude: amplitude_sum / m,
+        amplitude: amplitude_sum / cfg.frames as f64,
         phase_residual,
         // Heuristic: a clean sinusoid sits near zero; a quarter radian of wobble
         // means something else is going on in that bin.

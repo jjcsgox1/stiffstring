@@ -138,6 +138,8 @@ fn main() {
     println!("  fundamental recovered:   f0 = {got_f0:.4} Hz  (true {f0}, {:+.4} cents)",
         cents(f0, got_f0));
 
+    let (worst_f0, worst_b_pct, slowest_ms) = keyboard_sweep();
+
     println!("\nGATES");
     println!(
         "  clean better than 0.020 cents  : {}  (worst {worst_clean:.5})",
@@ -147,4 +149,93 @@ fn main() {
         "  20 dB SNR better than 0.100    : {}  (worst {worst_at_20:.5})",
         if worst_at_20 < 0.1 { "PASS" } else { "FAIL" }
     );
+    println!("  whole keyboard, f0 within 1c   : {}  (worst {worst_f0:.4})",
+        if worst_f0 < 1.0 { "PASS" } else { "FAIL" });
+    println!("  whole keyboard, B within 10%   : {}  (worst {worst_b_pct:.2}%)",
+        if worst_b_pct < 10.0 { "PASS" } else { "FAIL" });
+    println!("  a note measured under 500 ms   : {}  (slowest {slowest_ms:.0} ms)",
+        if slowest_ms < 500.0 { "PASS" } else { "FAIL" });
+}
+
+/// A string with a plausible partial structure for its register.
+///
+/// Bass strings put almost nothing in the fundamental and plenty in the upper
+/// partials; treble strings offer three or four partials that die quickly.
+fn plausible_string(f0: f64, b: f64) -> StringSpec {
+    let mut s = StringSpec::new(f0, b);
+    if f0 < 70.0 {
+        s.partials = 16;
+        s.rolloff = -0.8; // upper partials louder than the fundamental
+        s.t60 = 14.0;
+        s.decay_exp = 0.45;
+    } else if f0 < 700.0 {
+        s.partials = 12;
+        s.rolloff = 1.0;
+        s.t60 = 7.0;
+    } else {
+        s.partials = 4;
+        s.rolloff = 1.3;
+        s.t60 = 1.8;
+        s.decay_exp = 1.0;
+    }
+    s.amp = 0.4;
+    s
+}
+
+/// Measure notes across the compass of a simulated small piano.
+///
+/// The stiffness values follow the shape a spinet actually has: high at the
+/// bottom where the strings are short and thickly wound, dipping through the
+/// tenor, then climbing steeply into the treble.
+fn keyboard_sweep() -> (f64, f64, f64) {
+    use std::time::Instant;
+    use stiffstring_core::inharmonicity::{measure_note, MeasureConfig};
+
+    println!("\nACROSS THE KEYBOARD  (simulated spinet, 65 dB noise floor)");
+    println!(
+        "  {:>5} {:>9} {:>10} {:>10} {:>9} {:>8} {:>5} {:>6}  {}",
+        "note", "f0", "B true", "B found", "f0 err", "B err", "used", "ms", "concerns"
+    );
+
+    let notes: &[(&str, f64, f64)] = &[
+        ("A0", 27.50, 1.20e-3),
+        ("A1", 55.00, 4.00e-4),
+        ("A2", 110.00, 1.20e-4),
+        ("A3", 220.63, 3.04e-4),
+        ("A4", 441.92, 7.33e-4),
+        ("A5", 880.00, 1.60e-3),
+        ("A6", 1760.00, 3.50e-3),
+        ("C7", 2093.00, 4.50e-3),
+    ];
+
+    let (mut worst_f0, mut worst_b, mut slowest) = (0.0f64, 0.0f64, 0.0f64);
+    for &(name, f0, b) in notes {
+        let x = tone(vec![plausible_string(f0, b)], 1.5, Some(-65.0), 4242);
+
+        let started = Instant::now();
+        let m = measure_note(&x, SR, f0, MeasureConfig::default());
+        let ms = started.elapsed().as_secs_f64() * 1000.0;
+        slowest = slowest.max(ms);
+
+        match m {
+            Some(m) => {
+                let f0_err = cents(f0, m.f0);
+                let b_err = 100.0 * (m.b - b) / b;
+                worst_f0 = worst_f0.max(f0_err.abs());
+                worst_b = worst_b.max(b_err.abs());
+                let concerns = if m.concerns.is_empty() {
+                    "-".to_string()
+                } else {
+                    format!("{:?}", m.concerns)
+                };
+                println!(
+                    "  {name:>5} {f0:>9.2} {b:>10.3e} {:>10.3e} {f0_err:>8.4}\u{a2} {b_err:>7.2}% {:>5} {ms:>6.0}  {concerns}",
+                    m.b,
+                    m.used_count()
+                );
+            }
+            None => println!("  {name:>5} {f0:>9.2} {b:>10.3e}   NO MEASUREMENT"),
+        }
+    }
+    (worst_f0, worst_b, slowest)
 }
