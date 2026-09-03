@@ -19,3 +19,8 @@ noise suppression, the measurement engine cannot be trusted on that platform.
 
 The full plan, with the decisions log and the reasoning behind each choice, lives at
 `~/.claude/plans/i-wanna-make-a-swirling-fairy.md`.
+
+## Hosting
+
+Served by GitHub Pages from the repository root. The microphone requires HTTPS, so the
+pages cannot be tested by opening the files directly from disk.
