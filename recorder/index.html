@@ -1,0 +1,633 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Stiffstring Note Recorder</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ground:#101319; --panel:#171b23; --panel-hi:#1e242e; --line:#2b323e;
+  --ink:#e7ebf2; --dim:#8b95a4; --brass:#c9a15a; --brass-soft:#8a6f3d;
+  --good:#56b38a; --bad:#d9645a;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --cond:"IBM Plex Sans Condensed","IBM Plex Sans",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--ground);color:var(--ink);
+  font-family:var(--sans);font-size:15px;line-height:1.55;
+  -webkit-text-size-adjust:100%;
+}
+.wrap{max-width:720px;margin:0 auto;padding:18px 16px 90px}
+header{
+  display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;
+  padding-bottom:12px;border-bottom:1px solid var(--line);margin-bottom:18px;
+}
+h1{font-family:var(--cond);font-weight:600;font-size:21px;margin:0;letter-spacing:.02em;color:var(--brass)}
+header .sub{color:var(--dim);font-size:13px;margin:0}
+
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:4px;margin-bottom:14px;overflow:hidden}
+.phead{display:flex;align-items:center;gap:10px;padding:9px 14px;background:var(--panel-hi);border-bottom:1px solid var(--line)}
+.pnum{font-family:var(--mono);font-size:11px;color:var(--brass-soft);border:1px solid var(--brass-soft);border-radius:2px;padding:1px 5px;flex:none}
+.ptitle{font-family:var(--cond);font-weight:600;text-transform:uppercase;letter-spacing:.09em;font-size:13px;margin:0;flex:1}
+.pill{font-family:var(--mono);font-size:11px;letter-spacing:.04em;padding:2px 8px;border-radius:2px;border:1px solid var(--line);color:var(--dim);white-space:nowrap;flex:none}
+.pill.good{color:var(--good);border-color:#2f5c48}
+.pill.bad{color:var(--bad);border-color:#6b3430}
+.pill.busy{color:var(--brass);border-color:var(--brass-soft)}
+.pbody{padding:14px}
+.pbody>*+*{margin-top:12px}
+p{margin:0}
+.note{color:var(--dim);font-size:13px}
+.err{color:var(--bad);font-size:13px}
+
+button{font-family:var(--sans);font-size:14px;font-weight:500;background:var(--panel-hi);color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:10px 16px;cursor:pointer}
+button:hover:not(:disabled){border-color:var(--brass-soft);color:var(--brass)}
+button:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+button:disabled{opacity:.4;cursor:default}
+button.primary{background:var(--brass);color:#1a1409;border-color:var(--brass);font-weight:600}
+button.primary:hover:not(:disabled){background:#dcb164;color:#1a1409}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+
+label{font-family:var(--cond);text-transform:uppercase;letter-spacing:.09em;font-size:11px;color:var(--dim);display:block;margin-bottom:4px}
+input[type=text],select{
+  width:100%;background:#0a0d11;color:var(--ink);border:1px solid var(--line);
+  border-radius:3px;padding:9px 10px;font-family:var(--sans);font-size:15px;
+}
+input[type=text]:focus,select:focus{outline:none;border-color:var(--brass-soft)}
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:520px){.fields{grid-template-columns:1fr}}
+
+.target{text-align:center;padding:6px 0 2px}
+.target .lbl{font-family:var(--cond);text-transform:uppercase;letter-spacing:.09em;font-size:11px;color:var(--dim)}
+.target .name{font-family:var(--mono);font-size:62px;font-weight:500;line-height:1.05;letter-spacing:-.02em}
+.target .key{font-family:var(--mono);font-size:13px;color:var(--dim)}
+.prompt{text-align:center;font-family:var(--cond);text-transform:uppercase;letter-spacing:.1em;font-size:13px;color:var(--brass)}
+
+.bar{height:12px;background:#0a0d11;border:1px solid var(--line);border-radius:2px;overflow:hidden}
+.bar>i{display:block;height:100%;background:var(--brass);width:0%}
+.bar>i.hot{background:var(--bad)}
+
+.strip{display:flex;flex-wrap:wrap;gap:4px}
+.strip>span{
+  font-family:var(--mono);font-size:11px;padding:3px 6px;border-radius:2px;
+  border:1px solid var(--line);color:var(--dim);cursor:pointer;
+}
+.strip>span.done{color:var(--good);border-color:#2f5c48}
+.strip>span.warn{color:var(--brass);border-color:var(--brass-soft)}
+.strip>span.now{background:var(--brass);color:#1a1409;border-color:var(--brass);font-weight:600}
+
+table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12.5px;font-variant-numeric:tabular-nums}
+th,td{text-align:right;padding:5px 8px;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+th{font-family:var(--cond);text-transform:uppercase;letter-spacing:.08em;font-size:11px;color:var(--dim);font-weight:600}
+td.bad{color:var(--bad)} td.warn{color:var(--brass)} td.good{color:var(--good)}
+.scroll{overflow-x:auto}
+.hidden{display:none!important}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Stiffstring Note Recorder</h1>
+  <p class="sub">Single notes from a real piano, saved uncompressed for measurement.</p>
+</header>
+
+<div class="panel">
+  <div class="phead">
+    <span class="pnum">1</span>
+    <h2 class="ptitle">This piano</h2>
+    <span class="pill" id="p1">describe it</span>
+  </div>
+  <div class="pbody">
+    <div class="fields">
+      <div>
+        <label for="pianoName">Make and model</label>
+        <input type="text" id="pianoName" placeholder="Kimball spinet" autocomplete="off">
+      </div>
+      <div>
+        <label for="pianoType">Type</label>
+        <select id="pianoType">
+          <option value="spinet">Spinet</option>
+          <option value="console">Console</option>
+          <option value="upright">Upright</option>
+          <option value="studio">Studio upright</option>
+          <option value="baby-grand">Baby grand</option>
+          <option value="grand">Grand</option>
+          <option value="unknown">Not sure</option>
+        </select>
+      </div>
+    </div>
+    <p class="note">Rough condition and anything odd about it is worth a word &mdash; a piano that
+      fights you is the most useful recording we can get, not the least.</p>
+    <div>
+      <label for="pianoNotes">Condition notes</label>
+      <input type="text" id="pianoNotes" placeholder="1970s, rusty bass, tenor won't hold" autocomplete="off">
+    </div>
+    <div class="row"><button class="primary" id="btnStart">Start microphone</button></div>
+    <p class="err hidden" id="startErr"></p>
+    <p class="note" id="ctxNote"></p>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="phead">
+    <span class="pnum">2</span>
+    <h2 class="ptitle">Record</h2>
+    <span class="pill" id="p2">waiting</span>
+  </div>
+  <div class="pbody">
+    <div class="target">
+      <span class="lbl">Play this note</span>
+      <div class="name" id="targetName">&mdash;</div>
+      <div class="key" id="targetKey">&nbsp;</div>
+    </div>
+    <p class="prompt" id="prompt">Start the microphone first</p>
+    <div class="bar"><i id="levelBar"></i></div>
+    <p class="note" id="levelNote">Play the note firmly, once, and let it ring. Recording starts on
+      its own when it hears the strike.</p>
+    <div class="row">
+      <button id="btnSkip" disabled>Skip this note</button>
+      <button id="btnRedo" disabled>Re-record last</button>
+    </div>
+    <div class="strip" id="strip"></div>
+    <p class="note">Tap any note above to jump to it.</p>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="phead">
+    <span class="pnum">3</span>
+    <h2 class="ptitle">Save</h2>
+    <span class="pill" id="p3">nothing yet</span>
+  </div>
+  <div class="pbody">
+    <p class="note">One file for the whole piano. On the phone, set
+      <strong>Settings &rarr; Safari &rarr; Downloads &rarr; iCloud Drive</strong> first and it will
+      land somewhere you can fetch it from a computer.</p>
+    <div class="row">
+      <button class="primary" id="btnSave" disabled>Save this piano</button>
+      <span class="note" id="saveSize"></span>
+    </div>
+    <div class="scroll"><table id="tbl"><thead><tr>
+      <th>Note</th><th>Key</th><th>Peak dB</th><th>Length</th><th>Quality</th>
+    </tr></thead><tbody></tbody></table></div>
+  </div>
+</div>
+
+</div>
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+
+/* ---------- notes to collect ---------- */
+const NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+const keyName = k => { const m = k + 20; return NAMES[m % 12] + (Math.floor(m / 12) - 1); };
+const keyHz = k => 440 * Math.pow(2, (k - 49) / 12);
+
+// Spread across the compass, denser in the bass where the stiffness curve bends
+// hardest and where the wound-to-plain break has to be found.
+const TARGET_KEYS = [1,4,8,12,16,19,22,25,28,31,34,37,40,46,52,58,64,70,76,82,85,88];
+
+const CAPTURE_SECONDS = 3.5;
+const PREROLL_SECONDS = 0.15;   // keep the attack, which arrives before we notice it
+const ONSET_RISE_DB = 14;       // above the running floor
+const ONSET_FLOOR_DB = -62;     // and above this outright, so room noise cannot trigger
+const REARM_SECONDS = 0.8;      // ignore the tail of what we just captured
+const SETTLE_SECONDS = 1.5;     // let the noise floor tracker find the room first
+
+const S = {
+  ac:null, stream:null, settings:null, node:null,
+  sampleRate:0, running:false,
+  ring:null, ringLen:0, ringPos:0,
+  armed:false, capturing:false, captured:null, capturedAt:0,
+  floorDb:-90, lastRms:-90, peakHold:0,
+  index:0, takes:new Map(), lastKey:null,
+};
+
+function setPill(sel, text, cls){
+  const el = $(sel);
+  el.textContent = text;
+  el.className = "pill" + (cls ? " " + cls : "");
+}
+const dbfs = a => a > 0 ? 20 * Math.log10(a) : -Infinity;
+const fmt = (v, d) => Number.isFinite(v) ? v.toFixed(d) : "—";
+
+/* ---------- capture graph ---------- */
+// Batched to about fifty messages a second rather than four hundred. The audio
+// thread must never be made to wait, and a phone has better things to do.
+const WORKLET = `
+class Tap extends AudioWorkletProcessor {
+  constructor() { super(); this.buf = new Float32Array(1024); this.n = 0; }
+  process(inputs) {
+    const ch = inputs[0] && inputs[0][0];
+    if (ch) {
+      for (let i = 0; i < ch.length; i++) {
+        this.buf[this.n++] = ch[i];
+        if (this.n === this.buf.length) { this.port.postMessage(this.buf.slice()); this.n = 0; }
+      }
+    }
+    return true;
+  }
+}
+registerProcessor('tap', Tap);
+`;
+
+async function start(){
+  $("#btnStart").disabled = true;
+  setPill("#p1", "requesting", "busy");
+  $("#startErr").classList.add("hidden");
+  try {
+    S.stream = await navigator.mediaDevices.getUserMedia({
+      audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:false, channelCount:1 },
+      video:false
+    });
+  } catch(e){
+    setPill("#p1", "blocked", "bad");
+    $("#btnStart").disabled = false;
+    const err = $("#startErr");
+    err.classList.remove("hidden");
+    err.textContent = "Microphone refused — " + e.name + ": " + e.message;
+    return;
+  }
+
+  const track = S.stream.getAudioTracks()[0];
+  try { S.settings = track.getSettings ? track.getSettings() : null; } catch(e){ S.settings = null; }
+
+  const AC = window.AudioContext || window.webkitAudioContext;
+  S.ac = new AC();
+  if (S.ac.state === "suspended") { try { await S.ac.resume(); } catch(e){} }
+  S.sampleRate = S.ac.sampleRate;
+
+  if (!S.ac.audioWorklet){
+    setPill("#p1", "unsupported", "bad");
+    const err = $("#startErr");
+    err.classList.remove("hidden");
+    err.textContent = "This browser has no AudioWorklet, so raw samples cannot be captured reliably.";
+    return;
+  }
+
+  const url = URL.createObjectURL(new Blob([WORKLET], { type:"application/javascript" }));
+  await S.ac.audioWorklet.addModule(url);
+  URL.revokeObjectURL(url);
+
+  S.ringLen = Math.ceil(S.sampleRate * (CAPTURE_SECONDS + PREROLL_SECONDS + 1));
+  S.ring = new Float32Array(S.ringLen);
+  S.ringPos = 0;
+
+  const src = S.ac.createMediaStreamSource(S.stream);
+  S.node = new AudioWorkletNode(S.ac, "tap");
+  S.node.port.onmessage = e => onSamples(e.data);
+  src.connect(S.node);
+  // Keep the graph alive without making a sound.
+  const sink = S.ac.createGain();
+  sink.gain.value = 0;
+  S.node.connect(sink).connect(S.ac.destination);
+
+  S.running = true;
+  S.armed = true;
+  S.armedAt = performance.now();
+  setPill("#p1", "listening", "good");
+  setPill("#p2", "ready", "good");
+  $("#btnSkip").disabled = false;
+
+  $("#ctxNote").textContent =
+    "Sample rate " + S.sampleRate + " Hz. Gain control " +
+    (S.settings && S.settings.autoGainControl ? "ON — unexpected" : "off or not applied") + ".";
+
+  try { if ("wakeLock" in navigator) await navigator.wakeLock.request("screen"); } catch(e){}
+
+  renderStrip();
+  showTarget();
+  requestAnimationFrame(tick);
+}
+
+function onSamples(block){
+  // Rolling buffer, so the attack is already recorded by the time we detect it.
+  for (let i = 0; i < block.length; i++){
+    S.ring[S.ringPos] = block[i];
+    S.ringPos = (S.ringPos + 1) % S.ringLen;
+  }
+
+  let sum = 0, peak = 0;
+  for (let i = 0; i < block.length; i++){
+    const v = block[i];
+    sum += v * v;
+    const a = v < 0 ? -v : v;
+    if (a > peak) peak = a;
+  }
+  const rms = dbfs(Math.sqrt(sum / block.length));
+  S.lastRms = rms;
+  if (peak > S.peakHold) S.peakHold = peak;
+
+  // Slow floor tracker: falls quickly to quiet, rises slowly, so a ringing note
+  // does not drag the threshold up behind it.
+  if (Number.isFinite(rms)) {
+    S.floorDb = rms < S.floorDb ? rms : S.floorDb + (rms - S.floorDb) * 0.002;
+  }
+
+  if (S.capturing){
+    S.capturedNeeded -= block.length;
+    if (S.capturedNeeded <= 0) finishCapture();
+    return;
+  }
+
+  if (!S.armed || S.index >= TARGET_KEYS.length) return;
+  // Let the floor tracker settle before trusting it, or a door closing in the
+  // first second gets recorded as A0.
+  if (performance.now() - S.armedAt < SETTLE_SECONDS * 1000) return;
+  if (performance.now() - S.capturedAt < REARM_SECONDS * 1000) return;
+
+  if (rms > S.floorDb + ONSET_RISE_DB && rms > ONSET_FLOOR_DB){
+    S.capturing = true;
+    S.capturedNeeded = Math.ceil(S.sampleRate * CAPTURE_SECONDS);
+    S.captureStart = (S.ringPos - Math.ceil(S.sampleRate * PREROLL_SECONDS) - block.length + S.ringLen * 2) % S.ringLen;
+    setPill("#p2", "recording", "busy");
+    $("#prompt").textContent = "Recording — let it ring";
+  }
+}
+
+function finishCapture(){
+  S.capturing = false;
+  S.capturedAt = performance.now();
+
+  const total = Math.ceil(S.sampleRate * (CAPTURE_SECONDS + PREROLL_SECONDS));
+  const out = new Float32Array(total);
+  for (let i = 0; i < total; i++) out[i] = S.ring[(S.captureStart + i) % S.ringLen];
+
+  let peak = 0;
+  for (let i = 0; i < out.length; i++){ const a = out[i] < 0 ? -out[i] : out[i]; if (a > peak) peak = a; }
+
+  const key = TARGET_KEYS[S.index];
+  S.takes.set(key, { key, samples:out, peak, at:new Date().toISOString() });
+  S.lastKey = key;
+
+  S.index++;
+  S.peakHold = 0;
+  renderStrip();
+  renderTable();
+  showTarget();
+  $("#btnRedo").disabled = false;
+  $("#btnSave").disabled = S.takes.size === 0;
+  setPill("#p3", S.takes.size + " recorded", "good");
+  setPill("#p2", S.index >= TARGET_KEYS.length ? "all done" : "ready", "good");
+}
+
+/* ---------- quality ---------- */
+function quality(take){
+  const db = dbfs(take.peak);
+  if (take.peak >= 0.999) return { word:"clipped", cls:"bad" };
+  if (db < -55) return { word:"very quiet", cls:"bad" };
+  if (db < -42) return { word:"quiet", cls:"warn" };
+  if (db > -6) return { word:"hot", cls:"warn" };
+  return { word:"good", cls:"good" };
+}
+
+/* ---------- display ---------- */
+function showTarget(){
+  if (S.index >= TARGET_KEYS.length){
+    $("#targetName").textContent = "done";
+    $("#targetKey").textContent = S.takes.size + " notes recorded";
+    $("#prompt").textContent = "Save the piano below";
+    return;
+  }
+  const key = TARGET_KEYS[S.index];
+  $("#targetName").textContent = keyName(key);
+  $("#targetKey").textContent = "key " + key + " · about " + keyHz(key).toFixed(1) + " Hz";
+  $("#prompt").textContent = S.running ? "Waiting for the strike" : "Start the microphone first";
+}
+
+function renderStrip(){
+  const strip = $("#strip");
+  strip.innerHTML = "";
+  TARGET_KEYS.forEach((key, i) => {
+    const el = document.createElement("span");
+    el.textContent = keyName(key);
+    const take = S.takes.get(key);
+    if (i === S.index) el.className = "now";
+    else if (take) el.className = quality(take).cls === "bad" ? "warn" : "done";
+    el.addEventListener("click", () => { S.index = i; S.peakHold = 0; renderStrip(); showTarget(); });
+    strip.appendChild(el);
+  });
+}
+
+function renderTable(){
+  const tb = $("#tbl tbody");
+  tb.innerHTML = "";
+  const keys = Array.from(S.takes.keys()).sort((a,b) => a - b);
+  let bytes = 0;
+  for (const key of keys){
+    const take = S.takes.get(key);
+    bytes += take.samples.length * 4;
+    const q = quality(take);
+    const tr = document.createElement("tr");
+    tr.innerHTML =
+      "<td>" + keyName(key) + "</td>" +
+      "<td>" + key + "</td>" +
+      "<td>" + fmt(dbfs(take.peak), 1) + "</td>" +
+      "<td>" + (take.samples.length / S.sampleRate).toFixed(2) + " s</td>" +
+      '<td class="' + q.cls + '">' + q.word + "</td>";
+    tb.appendChild(tr);
+  }
+  $("#saveSize").textContent = keys.length
+    ? "about " + (bytes / 1048576).toFixed(1) + " MB"
+    : "";
+}
+
+function tick(){
+  if (!S.running) return;
+  requestAnimationFrame(tick);
+  const bar = $("#levelBar");
+  bar.style.width = Math.min(100, S.peakHold * 100) + "%";
+  bar.classList.toggle("hot", S.peakHold >= 0.999);
+  S.peakHold *= 0.97;
+}
+
+/* ---------- WAV, 32-bit float so nothing is rounded away ---------- */
+function wav(samples, sampleRate){
+  const bytes = samples.length * 4;
+  const buf = new ArrayBuffer(44 + bytes);
+  const v = new DataView(buf);
+  const tag = (off, s) => { for (let i = 0; i < s.length; i++) v.setUint8(off + i, s.charCodeAt(i)); };
+  tag(0, "RIFF");  v.setUint32(4, 36 + bytes, true);
+  tag(8, "WAVE");
+  tag(12, "fmt "); v.setUint32(16, 16, true);
+  v.setUint16(20, 3, true);              // IEEE float
+  v.setUint16(22, 1, true);              // mono
+  v.setUint32(24, sampleRate, true);
+  v.setUint32(28, sampleRate * 4, true);
+  v.setUint16(32, 4, true);
+  v.setUint16(34, 32, true);
+  tag(36, "data"); v.setUint32(40, bytes, true);
+  new Float32Array(buf, 44).set(samples);
+  return new Uint8Array(buf);
+}
+
+/* ---------- ZIP, stored not deflated ---------- */
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++){
+    let c = n;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+
+function crc32(bytes){
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+function zip(files){
+  const enc = new TextEncoder();
+  const parts = [];
+  const central = [];
+  let offset = 0;
+
+  for (const f of files){
+    const name = enc.encode(f.name);
+    const crc = crc32(f.data);
+    const local = new Uint8Array(30 + name.length);
+    const lv = new DataView(local.buffer);
+    lv.setUint32(0, 0x04034b50, true);
+    lv.setUint16(4, 20, true);
+    lv.setUint16(6, 0, true);
+    lv.setUint16(8, 0, true);          // stored
+    lv.setUint16(10, 0, true);
+    lv.setUint16(12, 0, true);
+    lv.setUint32(14, crc, true);
+    lv.setUint32(18, f.data.length, true);
+    lv.setUint32(22, f.data.length, true);
+    lv.setUint16(26, name.length, true);
+    lv.setUint16(28, 0, true);
+    local.set(name, 30);
+    parts.push(local, f.data);
+
+    const dir = new Uint8Array(46 + name.length);
+    const dv = new DataView(dir.buffer);
+    dv.setUint32(0, 0x02014b50, true);
+    dv.setUint16(4, 20, true);
+    dv.setUint16(6, 20, true);
+    dv.setUint16(8, 0, true);
+    dv.setUint16(10, 0, true);
+    dv.setUint16(12, 0, true);
+    dv.setUint16(14, 0, true);
+    dv.setUint32(16, crc, true);
+    dv.setUint32(20, f.data.length, true);
+    dv.setUint32(24, f.data.length, true);
+    dv.setUint16(28, name.length, true);
+    dv.setUint16(30, 0, true);
+    dv.setUint16(32, 0, true);
+    dv.setUint16(34, 0, true);
+    dv.setUint16(36, 0, true);
+    dv.setUint32(38, 0, true);
+    dv.setUint32(42, offset, true);
+    dir.set(name, 46);
+    central.push(dir);
+
+    offset += local.length + f.data.length;
+  }
+
+  const centralSize = central.reduce((n, d) => n + d.length, 0);
+  const end = new Uint8Array(22);
+  const ev = new DataView(end.buffer);
+  ev.setUint32(0, 0x06054b50, true);
+  ev.setUint16(8, files.length, true);
+  ev.setUint16(10, files.length, true);
+  ev.setUint32(12, centralSize, true);
+  ev.setUint32(16, offset, true);
+
+  return new Blob([...parts, ...central, end], { type:"application/zip" });
+}
+
+/* ---------- save ---------- */
+function slug(s){
+  return (s || "piano").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "piano";
+}
+
+function save(){
+  const keys = Array.from(S.takes.keys()).sort((a,b) => a - b);
+  if (!keys.length) return;
+
+  const name = slug($("#pianoName").value);
+  const stamp = new Date().toISOString().slice(0, 10);
+  const folder = name + "-" + stamp;
+
+  const manifest = {
+    piano: {
+      name: $("#pianoName").value || "(unnamed)",
+      type: $("#pianoType").value,
+      notes: $("#pianoNotes").value || "",
+    },
+    recorded: new Date().toISOString(),
+    sampleRate: S.sampleRate,
+    format: "32-bit float mono WAV",
+    prerollSeconds: PREROLL_SECONDS,
+    userAgent: navigator.userAgent,
+    appliedConstraints: S.settings || null,
+    notes: keys.map(key => {
+      const take = S.takes.get(key);
+      return {
+        file: keyName(key) + "-key" + key + ".wav",
+        key,
+        name: keyName(key),
+        nominalHz: Number(keyHz(key).toFixed(4)),
+        peakDbfs: Number(dbfs(take.peak).toFixed(2)),
+        seconds: Number((take.samples.length / S.sampleRate).toFixed(3)),
+        quality: quality(take).word,
+        at: take.at,
+      };
+    }),
+  };
+
+  const files = [{
+    name: folder + "/manifest.json",
+    data: new TextEncoder().encode(JSON.stringify(manifest, null, 2)),
+  }];
+  for (const key of keys){
+    files.push({
+      name: folder + "/" + keyName(key) + "-key" + key + ".wav",
+      data: wav(S.takes.get(key).samples, S.sampleRate),
+    });
+  }
+
+  const blob = zip(files);
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = folder + ".zip";
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+  setPill("#p3", "saved", "good");
+}
+
+/* ---------- wiring ---------- */
+$("#btnStart").addEventListener("click", start);
+$("#btnSave").addEventListener("click", save);
+$("#btnSkip").addEventListener("click", () => {
+  if (S.index < TARGET_KEYS.length) S.index++;
+  renderStrip(); showTarget();
+});
+$("#btnRedo").addEventListener("click", () => {
+  if (S.lastKey === null) return;
+  const i = TARGET_KEYS.indexOf(S.lastKey);
+  if (i >= 0){
+    S.takes.delete(S.lastKey);
+    S.index = i;
+    S.lastKey = null;
+    $("#btnRedo").disabled = true;
+    renderStrip(); renderTable(); showTarget();
+    $("#btnSave").disabled = S.takes.size === 0;
+  }
+});
+
+renderStrip();
+showTarget();
+</script>
+</body>
+</html>
