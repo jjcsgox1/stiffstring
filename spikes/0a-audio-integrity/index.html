@@ -1,0 +1,691 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Stiffstring Audio Check</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ground:#101319; --panel:#171b23; --panel-hi:#1e242e; --line:#2b323e;
+  --ink:#e7ebf2; --dim:#8b95a4; --brass:#c9a15a; --brass-soft:#8a6f3d;
+  --good:#56b38a; --bad:#d9645a;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --cond:"IBM Plex Sans Condensed","IBM Plex Sans",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:var(--sans); font-size:15px; line-height:1.55;
+  -webkit-text-size-adjust:100%;
+}
+.wrap{max-width:760px;margin:0 auto;padding:20px 16px 80px}
+
+header{
+  display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;
+  padding-bottom:14px;border-bottom:1px solid var(--line);margin-bottom:22px;
+}
+h1{
+  font-family:var(--cond);font-weight:600;font-size:22px;margin:0;
+  letter-spacing:.02em;color:var(--brass);
+}
+header .sub{color:var(--dim);font-size:13px;margin:0}
+
+.panel{
+  background:var(--panel);border:1px solid var(--line);border-radius:4px;
+  margin-bottom:16px;overflow:hidden;
+}
+.phead{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 14px;background:var(--panel-hi);border-bottom:1px solid var(--line);
+}
+.pnum{
+  font-family:var(--mono);font-size:11px;color:var(--brass-soft);
+  border:1px solid var(--brass-soft);border-radius:2px;padding:1px 5px;flex:none;
+}
+.ptitle{
+  font-family:var(--cond);font-weight:600;text-transform:uppercase;
+  letter-spacing:.09em;font-size:13px;margin:0;flex:1;
+}
+.pill{
+  font-family:var(--mono);font-size:11px;letter-spacing:.04em;
+  padding:2px 8px;border-radius:2px;border:1px solid var(--line);
+  color:var(--dim);white-space:nowrap;flex:none;
+}
+.pill.good{color:var(--good);border-color:#2f5c48}
+.pill.bad{color:var(--bad);border-color:#6b3430}
+.pill.busy{color:var(--brass);border-color:var(--brass-soft)}
+.pill.warn{color:var(--brass);border-color:var(--brass-soft)}
+.pbody{padding:14px}
+.pbody>*+*{margin-top:12px}
+p{margin:0}
+.note{color:var(--dim);font-size:13px}
+
+button{
+  font-family:var(--sans);font-size:14px;font-weight:500;
+  background:var(--panel-hi);color:var(--ink);
+  border:1px solid var(--line);border-radius:3px;
+  padding:9px 15px;cursor:pointer;
+}
+button:hover:not(:disabled){border-color:var(--brass-soft);color:var(--brass)}
+button:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+button:disabled{opacity:.4;cursor:default}
+button.primary{background:var(--brass);color:#1a1409;border-color:var(--brass);font-weight:600}
+button.primary:hover:not(:disabled){background:#dcb164;color:#1a1409}
+.row{display:flex;flex-wrap:wrap;gap:8px}
+
+dl.kv{display:grid;grid-template-columns:auto 1fr;gap:5px 16px;margin:0}
+dl.kv dt{font-size:13px;color:var(--dim)}
+dl.kv dd{margin:0;font-family:var(--mono);font-size:13px;font-variant-numeric:tabular-nums;word-break:break-word}
+dd.good{color:var(--good)} dd.bad{color:var(--bad)} dd.warn{color:var(--brass)}
+
+.big{
+  font-family:var(--mono);font-variant-numeric:tabular-nums;
+  font-size:34px;font-weight:500;line-height:1.1;letter-spacing:-.01em;
+}
+.big .unit{font-size:15px;color:var(--dim);font-weight:400}
+.readouts{display:flex;gap:26px;flex-wrap:wrap}
+.readouts .lbl{
+  font-family:var(--cond);text-transform:uppercase;letter-spacing:.09em;
+  font-size:11px;color:var(--dim);display:block;margin-bottom:2px;
+}
+
+canvas{display:block;width:100%;background:#0a0d11;border:1px solid var(--line);border-radius:3px}
+
+.bar{height:10px;background:#0a0d11;border:1px solid var(--line);border-radius:2px;overflow:hidden}
+.bar>i{display:block;height:100%;background:var(--brass);width:0%}
+.bar>i.hot{background:var(--bad)}
+
+table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12.5px;font-variant-numeric:tabular-nums}
+th,td{text-align:right;padding:5px 8px;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+th{font-family:var(--cond);text-transform:uppercase;letter-spacing:.08em;font-size:11px;color:var(--dim);font-weight:600}
+.scroll{overflow-x:auto}
+.sub-db{color:var(--dim)}
+
+textarea{
+  width:100%;height:230px;background:#0a0d11;color:var(--ink);
+  border:1px solid var(--line);border-radius:3px;padding:10px;
+  font-family:var(--mono);font-size:12px;line-height:1.5;resize:vertical;
+}
+.hidden{display:none!important}
+.err{color:var(--bad);font-size:13px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Stiffstring Audio Check</h1>
+  <p class="sub">Phase 0a &mdash; does this device hand us raw, unprocessed microphone audio?</p>
+</header>
+
+<div class="panel">
+  <div class="phead">
+    <span class="pnum">1</span>
+    <h2 class="ptitle">Capture settings</h2>
+    <span class="pill" id="p1">not started</span>
+  </div>
+  <div class="pbody">
+    <p class="note">We ask for the microphone with gain control, noise suppression and echo cancellation
+      switched <strong>off</strong>, then read back what the browser actually did. Allow the microphone when asked.</p>
+    <div class="row"><button class="primary" id="btnStart">Start microphone</button></div>
+    <p class="err hidden" id="startErr"></p>
+    <dl class="kv" id="ctxInfo"></dl>
+    <p class="note hidden" id="frameNote">This page is inside a frame. If the microphone is refused here it may be
+      the frame&rsquo;s permissions rather than the browser itself &mdash; in that case we host it separately and retry.</p>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="phead">
+    <span class="pnum">2</span>
+    <h2 class="ptitle">Live signal</h2>
+    <span class="pill" id="p2">waiting</span>
+  </div>
+  <div class="pbody">
+    <div class="readouts">
+      <div><span class="lbl">Level</span><span class="big" id="rmsNow">&mdash;<span class="unit"> dB</span></span></div>
+      <div><span class="lbl">Strongest component</span><span class="big" id="hzNow">&mdash;<span class="unit"> Hz</span></span></div>
+      <div><span class="lbl">Nearest note</span><span class="big" id="noteNow">&mdash;</span></div>
+    </div>
+    <div class="bar"><i id="peakBar"></i></div>
+    <p class="note" id="clipNote">Peak headroom. Turns red if the input clips &mdash; move the phone further from the strings.</p>
+    <canvas id="spec" width="720" height="150"></canvas>
+    <p class="note">Spectrum, 0&ndash;4000 Hz. On a struck piano note you should see a row of sharp partials.</p>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="phead">
+    <span class="pnum">3</span>
+    <h2 class="ptitle">Gain stability &amp; gating</h2>
+    <span class="pill" id="p3">waiting</span>
+  </div>
+  <div class="pbody">
+    <p class="note">The important one. Press record, then <strong>stay quiet for three seconds</strong>, then
+      <strong>play one note and let it ring</strong> without touching the piano again. A natural decay falls
+      steadily. If the level flattens out or climbs back up, something is adjusting the gain for us.</p>
+    <div class="row"><button id="btnAgc" disabled>Record 12 seconds</button></div>
+    <canvas id="trace" width="720" height="170"></canvas>
+    <dl class="kv" id="agcOut"></dl>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="phead">
+    <span class="pnum">4</span>
+    <h2 class="ptitle">Bass response</h2>
+    <span class="pill" id="p4">waiting</span>
+  </div>
+  <div class="pbody">
+    <p class="note">How much of the bottom octave survives the microphone. Press a button, play that note
+      firmly, and let it ring for a couple of seconds. We record the loudest partials we can find.</p>
+    <div class="row">
+      <button class="cap" data-note="A0" disabled>Capture A0</button>
+      <button class="cap" data-note="A1" disabled>Capture A1</button>
+      <button class="cap" data-note="A2" disabled>Capture A2</button>
+      <button class="cap" data-note="A4" disabled>Capture A4</button>
+    </div>
+    <div class="scroll"><table id="capTable"><thead><tr>
+      <th>Note</th><th>Level dB</th><th>Peak 1</th><th>Peak 2</th><th>Peak 3</th><th>Peak 4</th><th>Peak 5</th>
+    </tr></thead><tbody></tbody></table></div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="phead">
+    <span class="pnum">5</span>
+    <h2 class="ptitle">Reference tone &amp; screen lock</h2>
+    <span class="pill" id="p5">waiting</span>
+  </div>
+  <div class="pbody">
+    <p class="note">Play a tone from <em>this</em> device. To check frequency accuracy, open this page on the
+      computer, play 440&nbsp;Hz there, and read what the phone measures in panel 2. Any error is the two clocks combined.</p>
+    <div class="row">
+      <button class="tone" data-hz="110">110 Hz</button>
+      <button class="tone" data-hz="220">220 Hz</button>
+      <button class="tone" data-hz="440">440 Hz</button>
+      <button class="tone" data-hz="880">880 Hz</button>
+      <button id="btnToneOff">Stop tone</button>
+    </div>
+    <div class="row"><button id="btnWake">Test screen wake lock</button></div>
+    <dl class="kv" id="miscOut"></dl>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="phead">
+    <span class="pnum">&#9662;</span>
+    <h2 class="ptitle">Results</h2>
+    <span class="pill" id="p6">nothing yet</span>
+  </div>
+  <div class="pbody">
+    <p class="note">Copy this and paste it back into the chat.</p>
+    <div class="row">
+      <button class="primary" id="btnCopy">Copy results</button>
+      <button id="btnRefresh">Refresh</button>
+    </div>
+    <textarea id="report" readonly spellcheck="false"></textarea>
+  </div>
+</div>
+
+</div>
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const NOTE_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+
+const S = {
+  stream:null, ac:null, analyser:null, src:null, running:false,
+  timeBuf:null, freqBuf:null, sampleRate:0,
+  settings:null, caps:null, constraintErr:null,
+  peakHold:0, captures:[], agc:null, wake:null, osc:null, gain:null,
+  wakeText:"not run",
+  live:{rms:-Infinity, peak:0, hz:0, db:-Infinity, peaks:[]}
+};
+
+function setPill(id, text, cls){
+  const el = $(id);
+  el.textContent = text;
+  el.className = "pill" + (cls ? " " + cls : "");
+}
+function dbfs(x){ return x > 0 ? 20*Math.log10(x) : -Infinity; }
+function fmt(v, d){ return Number.isFinite(v) ? v.toFixed(d) : "—"; }
+
+function noteFromHz(hz){
+  if (!(hz > 0)) return null;
+  const midi = 69 + 12*Math.log2(hz/440);
+  const n = Math.round(midi);
+  return { name: NOTE_NAMES[((n%12)+12)%12] + (Math.floor(n/12)-1), cents:(midi-n)*100 };
+}
+
+function kv(el, pairs){
+  el.innerHTML = "";
+  for (const [k, v, cls] of pairs){
+    const dt = document.createElement("dt"); dt.textContent = k;
+    const dd = document.createElement("dd"); dd.textContent = v;
+    if (cls) dd.className = cls;
+    el.append(dt, dd);
+  }
+}
+
+/* peak picking with parabolic interpolation on the dB spectrum */
+function topPeaks(buf, sampleRate, fftSize, minHz, count){
+  const binHz = sampleRate / fftSize;
+  const start = Math.max(2, Math.round(minHz / binHz));
+  const out = [];
+  for (let i = start; i < buf.length - 1; i++){
+    const y0 = buf[i-1], y1 = buf[i], y2 = buf[i+1];
+    if (!(y1 > y0 && y1 >= y2) || y1 < -95) continue;
+    const denom = y0 - 2*y1 + y2;
+    let d = 0;
+    if (Math.abs(denom) > 1e-9){
+      d = 0.5*(y0 - y2)/denom;
+      if (!(Math.abs(d) <= 1)) d = 0;
+    }
+    out.push({ hz:(i + d)*binHz, db: y1 - 0.25*(y0 - y2)*d });
+  }
+  out.sort((a,b) => b.db - a.db);
+  return out.slice(0, count);
+}
+
+function contextFacts(){
+  const framed = window.self !== window.top;
+  const rows = [
+    ["Secure context", window.isSecureContext ? "yes" : "no — microphone will be blocked",
+      window.isSecureContext ? "good" : "bad"],
+    ["Running in a frame", framed ? "yes — see note below" : "no", framed ? "warn" : "good"]
+  ];
+  if (S.sampleRate) rows.push(["Sample rate", S.sampleRate + " Hz"]);
+  rows.push(["Browser", navigator.userAgent]);
+  if (S.settings){
+    for (const [k, label] of [["autoGainControl","Automatic gain control"],
+                              ["noiseSuppression","Noise suppression"],
+                              ["echoCancellation","Echo cancellation"]]){
+      const v = S.settings[k];
+      if (v === undefined) rows.push([label, "not reported by this browser", "warn"]);
+      else rows.push([label, v ? "ON — unwanted" : "off — good", v ? "bad" : "good"]);
+    }
+    if (S.settings.channelCount !== undefined) rows.push(["Channels", String(S.settings.channelCount)]);
+  }
+  if (S.constraintErr) rows.push(["Microphone error", S.constraintErr, "bad"]);
+  kv($("#ctxInfo"), rows);
+  $("#frameNote").classList.toggle("hidden", !framed);
+}
+
+async function start(){
+  $("#btnStart").disabled = true;
+  setPill("#p1", "requesting", "busy");
+  $("#startErr").classList.add("hidden");
+  try {
+    S.stream = await navigator.mediaDevices.getUserMedia({
+      audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:false, channelCount:1 },
+      video:false
+    });
+  } catch(e){
+    setPill("#p1", "blocked", "bad");
+    $("#btnStart").disabled = false;
+    S.constraintErr = e.name + ": " + e.message;
+    const err = $("#startErr");
+    err.classList.remove("hidden");
+    err.textContent = "Microphone refused — " + S.constraintErr
+      + (window.self !== window.top ? "  (this page is in a frame; that may be the cause rather than the browser)" : "");
+    contextFacts();
+    buildReport();
+    return;
+  }
+
+  const track = S.stream.getAudioTracks()[0];
+  try { S.settings = track.getSettings ? track.getSettings() : null; } catch(e){ S.settings = null; }
+  try { S.caps = track.getCapabilities ? track.getCapabilities() : null; } catch(e){ S.caps = null; }
+
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!S.ac) S.ac = new AC();
+  if (S.ac.state === "suspended") { try { await S.ac.resume(); } catch(e){} }
+  S.sampleRate = S.ac.sampleRate;
+
+  S.src = S.ac.createMediaStreamSource(S.stream);
+  S.analyser = S.ac.createAnalyser();
+  try { S.analyser.fftSize = 32768; } catch(e){ S.analyser.fftSize = 16384; }
+  S.analyser.smoothingTimeConstant = 0;
+  S.analyser.minDecibels = -110;
+  S.analyser.maxDecibels = -5;
+  S.src.connect(S.analyser);
+
+  S.timeBuf = new Float32Array(S.analyser.fftSize);
+  S.freqBuf = new Float32Array(S.analyser.frequencyBinCount);
+  S.running = true;
+
+  const a = S.settings || {};
+  const anyOn = a.autoGainControl || a.noiseSuppression || a.echoCancellation;
+  setPill("#p1", anyOn ? "processing is on" : "raw requested", anyOn ? "bad" : "good");
+  setPill("#p2", "live", "good");
+  setPill("#p3", "ready", null);
+  setPill("#p4", "ready", null);
+  setPill("#p5", "ready", null);
+  $("#btnAgc").disabled = false;
+  $$(".cap").forEach(b => b.disabled = false);
+
+  contextFacts();
+  loop();
+  buildReport();
+}
+
+function loop(){
+  if (!S.running) return;
+  requestAnimationFrame(loop);
+
+  S.analyser.getFloatTimeDomainData(S.timeBuf);
+  let sum = 0, peak = 0;
+  for (let i = 0; i < S.timeBuf.length; i++){
+    const v = S.timeBuf[i];
+    sum += v*v;
+    const abs = v < 0 ? -v : v;
+    if (abs > peak) peak = abs;
+  }
+  const rmsDb = dbfs(Math.sqrt(sum / S.timeBuf.length));
+
+  S.analyser.getFloatFrequencyData(S.freqBuf);
+  const peaks = topPeaks(S.freqBuf, S.sampleRate, S.analyser.fftSize, 24, 6);
+  const top = peaks[0];
+  S.live = { rms:rmsDb, peak, hz: top ? top.hz : 0, db: top ? top.db : -Infinity, peaks };
+
+  $("#rmsNow").innerHTML = fmt(rmsDb, 1) + '<span class="unit"> dB</span>';
+  if (top && rmsDb > -70){
+    $("#hzNow").innerHTML = top.hz.toFixed(2) + '<span class="unit"> Hz</span>';
+    const n = noteFromHz(top.hz);
+    $("#noteNow").innerHTML = n
+      ? n.name + '<span class="unit"> ' + (n.cents >= 0 ? "+" : "−") + Math.abs(n.cents).toFixed(1) + "¢</span>"
+      : "—";
+  } else {
+    $("#hzNow").innerHTML = '—<span class="unit"> Hz</span>';
+    $("#noteNow").textContent = "—";
+  }
+
+  S.peakHold = Math.max(peak, S.peakHold * 0.985);
+  const bar = $("#peakBar");
+  bar.style.width = Math.min(100, S.peakHold * 100) + "%";
+  const clipping = peak >= 0.999;
+  bar.classList.toggle("hot", clipping);
+  if (clipping) $("#clipNote").textContent = "Input is clipping — move the phone further away.";
+
+  if (S.agc && S.agc.recording){
+    const t = (performance.now() - S.agc.t0) / 1000;
+    S.agc.pts.push({ t, db: rmsDb });
+    if (t >= 12){ S.agc.recording = false; finishAgc(); }
+    drawTrace();
+  }
+  drawSpectrum();
+}
+
+function fitCanvas(c){
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = c.clientWidth;
+  if (!w) return null;
+  const ratio = c.dataset.ratio ? Number(c.dataset.ratio) : (c.height / c.width);
+  if (!c.dataset.ratio) c.dataset.ratio = String(ratio);
+  const h = Math.round(w * ratio);
+  if (c.width !== Math.round(w*dpr) || c.height !== Math.round(h*dpr)){
+    c.width = Math.round(w*dpr);
+    c.height = Math.round(h*dpr);
+    c.style.height = h + "px";
+  }
+  const g = c.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { g, w, h };
+}
+
+function drawSpectrum(){
+  if (!S.analyser || !S.freqBuf) return;
+  const fit = fitCanvas($("#spec"));
+  if (!fit) return;
+  const { g, w, h } = fit;
+  g.fillStyle = "#0a0d11"; g.fillRect(0,0,w,h);
+
+  const binHz = S.sampleRate / S.analyser.fftSize;
+  const maxBin = Math.max(2, Math.min(S.freqBuf.length, Math.round(4000 / binHz)));
+
+  g.strokeStyle = "#1b222c"; g.lineWidth = 1;
+  for (let f = 1000; f <= 4000; f += 1000){
+    const x = (f/4000)*w;
+    g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke();
+  }
+
+  g.strokeStyle = "#c9a15a"; g.lineWidth = 1; g.beginPath();
+  for (let i = 1; i < maxBin; i++){
+    const x = (i/maxBin)*w;
+    const db = Math.max(-100, Math.min(-5, S.freqBuf[i]));
+    const y = h - ((db + 100)/95)*h;
+    if (i === 1) g.moveTo(x,y); else g.lineTo(x,y);
+  }
+  g.stroke();
+}
+
+function drawTrace(){
+  if (!S.agc) return;
+  const fit = fitCanvas($("#trace"));
+  if (!fit) return;
+  const { g, w, h } = fit;
+  g.fillStyle = "#0a0d11"; g.fillRect(0,0,w,h);
+
+  const TOP = -10, BOT = -100;
+  const yOf = db => h - ((Math.max(BOT, Math.min(TOP, db)) - BOT)/(TOP - BOT))*h;
+
+  g.strokeStyle = "#1b222c"; g.lineWidth = 1;
+  for (let db = -20; db >= -90; db -= 20){
+    const y = yOf(db);
+    g.beginPath(); g.moveTo(0,y); g.lineTo(w,y); g.stroke();
+  }
+  g.strokeStyle = "#2b323e";
+  const x3 = (3/12)*w;
+  g.beginPath(); g.moveTo(x3,0); g.lineTo(x3,h); g.stroke();
+
+  g.strokeStyle = "#c9a15a"; g.lineWidth = 1.5; g.beginPath();
+  let started = false;
+  for (const p of S.agc.pts){
+    const x = (p.t/12)*w, y = yOf(p.db);
+    if (!started){ g.moveTo(x,y); started = true; } else g.lineTo(x,y);
+  }
+  g.stroke();
+}
+
+function startAgc(){
+  S.agc = { t0: performance.now(), pts: [], recording: true, result: null };
+  S.peakHold = 0;
+  $("#btnAgc").disabled = true;
+  setPill("#p3", "recording", "busy");
+  kv($("#agcOut"), []);
+}
+
+function median(a){
+  if (!a.length) return NaN;
+  const s = a.slice().sort((x,y)=>x-y);
+  return s[Math.floor(s.length/2)];
+}
+function levelAt(pts, t){
+  const win = pts.filter(p => Math.abs(p.t - t) < 0.25).map(p => p.db).filter(Number.isFinite);
+  return win.length ? median(win) : NaN;
+}
+
+function finishAgc(){
+  const pts = S.agc.pts;
+  const floor = median(pts.filter(p => p.t < 2.5).map(p => p.db).filter(Number.isFinite));
+  let peak = { t:0, db:-Infinity };
+  for (const p of pts) if (p.t > 2 && Number.isFinite(p.db) && p.db > peak.db) peak = p;
+
+  const a = levelAt(pts, peak.t + 2);
+  const b = levelAt(pts, peak.t + 6);
+  const decay = (Number.isFinite(a) && Number.isFinite(b)) ? b - a : NaN;
+
+  let verdict, cls;
+  if (!Number.isFinite(decay)) { verdict = "not enough of the decay was captured — run it again"; cls = "warn"; }
+  else if (decay <= -8) { verdict = "natural decay — no sign of gain control"; cls = "good"; }
+  else if (decay <= -3) { verdict = "shallow decay — inconclusive, run it again"; cls = "warn"; }
+  else { verdict = "level is not falling — something is adjusting the gain"; cls = "bad"; }
+
+  S.agc.result = { floor, peakDb: peak.db, peakT: peak.t, decay, verdict };
+  kv($("#agcOut"), [
+    ["Room noise floor", fmt(floor,1) + " dB"],
+    ["Loudest moment", fmt(peak.db,1) + " dB at " + fmt(peak.t,1) + " s"],
+    ["Fall from +2 s to +6 s", fmt(decay,1) + " dB", cls],
+    ["Reading", verdict, cls]
+  ]);
+  setPill("#p3", cls === "good" ? "looks clean" : cls === "bad" ? "gain control suspected" : "inconclusive", cls);
+  $("#btnAgc").disabled = false;
+  buildReport();
+}
+
+function capture(note){
+  const btn = $$(".cap").find(b => b.dataset.note === note);
+  btn.disabled = true;
+  const started = performance.now();
+  let best = null;
+  setPill("#p4", "listening for " + note, "busy");
+  const tick = () => {
+    const t = (performance.now() - started)/1000;
+    if (S.live.rms > -70 && (!best || S.live.rms > best.rms)){
+      best = { rms:S.live.rms, peaks:(S.live.peaks || []).slice(0,5) };
+    }
+    if (t < 3.5){ requestAnimationFrame(tick); return; }
+    btn.disabled = false;
+    if (!best){ setPill("#p4", "nothing heard for " + note, "warn"); return; }
+    S.captures = S.captures.filter(c => c.note !== note);
+    S.captures.push({ note, rms:best.rms, peaks:best.peaks });
+    S.captures.sort((x,y) => x.note.localeCompare(y.note));
+    renderCaptures();
+    setPill("#p4", S.captures.length + " captured", "good");
+    buildReport();
+  };
+  requestAnimationFrame(tick);
+}
+
+function renderCaptures(){
+  const tb = $("#capTable tbody");
+  tb.innerHTML = "";
+  for (const c of S.captures){
+    const tr = document.createElement("tr");
+    let html = "<td>" + c.note + "</td><td>" + fmt(c.rms,1) + "</td>";
+    for (let i = 0; i < 5; i++){
+      const p = c.peaks[i];
+      html += "<td>" + (p ? p.hz.toFixed(1) + '<br><span class="sub-db">' + p.db.toFixed(0) + "</span>" : "—") + "</td>";
+    }
+    tr.innerHTML = html;
+    tb.appendChild(tr);
+  }
+}
+
+function tone(hz){
+  stopTone();
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!S.ac) S.ac = new AC();
+  if (S.ac.state === "suspended") S.ac.resume();
+  S.osc = S.ac.createOscillator();
+  S.gain = S.ac.createGain();
+  S.osc.type = "sine";
+  S.osc.frequency.value = hz;
+  S.gain.gain.value = 0;
+  S.osc.connect(S.gain).connect(S.ac.destination);
+  S.osc.start();
+  S.gain.gain.linearRampToValueAtTime(0.25, S.ac.currentTime + 0.05);
+  setPill("#p5", hz + " Hz playing", "busy");
+}
+function stopTone(){
+  if (!S.osc) return;
+  try {
+    S.gain.gain.cancelScheduledValues(S.ac.currentTime);
+    S.gain.gain.linearRampToValueAtTime(0, S.ac.currentTime + 0.03);
+    S.osc.stop(S.ac.currentTime + 0.06);
+  } catch(e){}
+  S.osc = null; S.gain = null;
+  setPill("#p5", "ready", null);
+}
+
+async function testWake(){
+  try {
+    if (!("wakeLock" in navigator)) throw new Error("not supported by this browser");
+    S.wake = await navigator.wakeLock.request("screen");
+    S.wakeText = "granted — the screen will stay on";
+    kv($("#miscOut"), [["Screen wake lock", S.wakeText, "good"]]);
+  } catch(e){
+    S.wakeText = "unavailable: " + e.message;
+    kv($("#miscOut"), [["Screen wake lock", S.wakeText, "bad"]]);
+  }
+  buildReport();
+}
+
+function buildReport(){
+  const L = [];
+  L.push("STIFFSTRING AUDIO CHECK — phase 0a");
+  L.push(new Date().toISOString());
+  L.push("");
+  L.push("CONTEXT");
+  L.push("  user agent      : " + navigator.userAgent);
+  L.push("  secure context  : " + window.isSecureContext);
+  L.push("  inside a frame  : " + (window.self !== window.top));
+  L.push("  sample rate     : " + (S.sampleRate || "n/a"));
+  L.push("");
+  L.push("APPLIED CONSTRAINTS");
+  if (S.constraintErr) L.push("  ERROR: " + S.constraintErr);
+  if (S.settings){
+    for (const k of ["autoGainControl","noiseSuppression","echoCancellation","channelCount","sampleRate","latency"]){
+      if (S.settings[k] !== undefined) L.push("  " + (k + "                ").slice(0,16) + ": " + S.settings[k]);
+    }
+  } else if (!S.constraintErr) L.push("  (not started yet)");
+  if (S.caps){
+    try { L.push("  capabilities    : " + JSON.stringify(S.caps)); } catch(e){}
+  }
+  L.push("");
+  L.push("GAIN STABILITY");
+  if (S.agc && S.agc.result){
+    const r = S.agc.result;
+    L.push("  noise floor     : " + fmt(r.floor,1) + " dB");
+    L.push("  loudest         : " + fmt(r.peakDb,1) + " dB at " + fmt(r.peakT,1) + " s");
+    L.push("  fall +2s..+6s   : " + fmt(r.decay,1) + " dB");
+    L.push("  reading         : " + r.verdict);
+    L.push("  trace (t:dB)    : " + S.agc.pts.filter((p,i) => i % 6 === 0)
+      .map(p => p.t.toFixed(1) + ":" + p.db.toFixed(1)).join(" "));
+  } else L.push("  not run");
+  L.push("");
+  L.push("BASS RESPONSE");
+  if (S.captures.length){
+    for (const c of S.captures){
+      L.push("  " + (c.note + "    ").slice(0,4) + " level " + fmt(c.rms,1) + " dB   peaks: " +
+        c.peaks.map(p => p.hz.toFixed(1) + "Hz@" + p.db.toFixed(0)).join("  "));
+    }
+  } else L.push("  not run");
+  L.push("");
+  L.push("SCREEN WAKE LOCK");
+  L.push("  " + S.wakeText);
+  $("#report").value = L.join("\n");
+  setPill("#p6", "ready to copy", "good");
+}
+
+$("#btnStart").addEventListener("click", start);
+$("#btnAgc").addEventListener("click", startAgc);
+$$(".cap").forEach(b => b.addEventListener("click", () => capture(b.dataset.note)));
+$$(".tone").forEach(b => b.addEventListener("click", () => tone(Number(b.dataset.hz))));
+$("#btnToneOff").addEventListener("click", stopTone);
+$("#btnWake").addEventListener("click", testWake);
+$("#btnRefresh").addEventListener("click", buildReport);
+$("#btnCopy").addEventListener("click", async () => {
+  buildReport();
+  const ta = $("#report");
+  try {
+    await navigator.clipboard.writeText(ta.value);
+    setPill("#p6", "copied", "good");
+  } catch(e){
+    ta.focus(); ta.select();
+    setPill("#p6", "select and copy by hand", "warn");
+  }
+});
+window.addEventListener("resize", () => { drawSpectrum(); drawTrace(); });
+
+contextFacts();
+buildReport();
+</script>
+</body>
+</html>
