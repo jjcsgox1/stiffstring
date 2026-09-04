@@ -67,13 +67,15 @@ pub enum Concern {
     /// Partials wobble in a way no single beat explains: noise swamping them, a
     /// badly false string, or three strings all disagreeing.
     UnstablePartials,
-    /// The strings of this note are beating against each other steadily.
+    /// This note's amplitude rises and falls steadily.
     ///
-    /// Information rather than a fault. Almost every note on a piano has two or
-    /// three strings, and how fast they beat is [the unison
-    /// spread](NoteMeasurement::unison_spread_cents) — something the technician
-    /// wants told, not something the measurement should apologise for.
-    BeatingUnison,
+    /// Information rather than a fault, and deliberately not called a unison.
+    /// On a note with two or three strings this is a unison wanting attention;
+    /// on a single-strung bass note it is a false beat — one string vibrating in
+    /// two planes — which tuning cannot fix. Only
+    /// [`Stringing`](crate::piano::Stringing) can tell those apart, and the
+    /// engine has no way to know how a piano is strung by listening.
+    StringsBeating,
     /// One or more partials were discarded as outliers.
     PartialsRejected,
 }
@@ -88,17 +90,21 @@ pub struct NoteMeasurement {
     pub partials: Vec<MeasuredPartial>,
     /// RMS of the fit residuals, in cents, over the partials actually used.
     pub rms_cents: f64,
-    /// How far apart this note's strings are, in cents, if they are beating.
+    /// How wide the beating is, expressed as an equivalent frequency spread in
+    /// cents.
     ///
-    /// Derived from how fast each partial beats: two strings `d` cents apart put
-    /// their `n`th partials `f_n * d / 1731` Hz apart, so every beating partial
-    /// is an independent estimate of the same spread and the median of them is
-    /// taken.
+    /// Derived from how fast each partial beats: two components `d` cents apart
+    /// put their `n`th partials `f_n * d / 1731` Hz apart, so every beating
+    /// partial independently estimates the same spread and the median is taken.
     ///
-    /// This falls out of measuring inharmonicity rather than costing anything
-    /// extra — the reason for measuring unisons as they are rather than muting
-    /// down to one string.
-    pub unison_spread_cents: Option<f64>,
+    /// Deliberately named for what is measured rather than what causes it. With
+    /// two or three strings this is the unison spread; with one it is the width
+    /// of a false beat. See [`Concern::StringsBeating`].
+    ///
+    /// It falls out of measuring inharmonicity rather than costing anything
+    /// extra — the reason for measuring notes as they sound rather than muting
+    /// down to a single string.
+    pub beat_spread_cents: Option<f64>,
     pub concerns: Vec<Concern>,
 }
 
@@ -621,7 +627,7 @@ pub fn measure_note(
         .filter(|s| s.is_finite() && *s > 0.0)
         .collect();
     spreads.sort_by(f64::total_cmp);
-    let unison_spread_cents = if spreads.is_empty() {
+    let beat_spread_cents = if spreads.is_empty() {
         None
     } else {
         Some(spreads[spreads.len() / 2])
@@ -644,7 +650,7 @@ pub fn measure_note(
     // unison beat too slowly for any practical window to resolve and can never
     // join in.
     if beating >= 2 {
-        concerns.push(Concern::BeatingUnison);
+        concerns.push(Concern::StringsBeating);
     }
     if used.iter().filter(|p| p.confidence < 0.6).count() * 2 >= used.len() {
         concerns.push(Concern::UnstablePartials);
@@ -658,7 +664,7 @@ pub fn measure_note(
         b: final_fit.b,
         partials,
         rms_cents: final_fit.rms_cents,
-        unison_spread_cents,
+        beat_spread_cents,
         concerns,
     })
 }
@@ -885,7 +891,7 @@ mod tests {
 
         let m = measure_note(&x, SR, f0, MeasureConfig::default()).expect("no measurement");
         let got = m
-            .unison_spread_cents
+            .beat_spread_cents
             .expect("a beating unison reported no spread");
         let detail = m
             .used()
@@ -904,7 +910,7 @@ mod tests {
             "strings {spread} cents apart measured as {got:.2}  [{detail}]"
         );
         assert!(
-            m.has(Concern::BeatingUnison),
+            m.has(Concern::StringsBeating),
             "beating went unreported  [{detail}]"
         );
 
@@ -936,9 +942,9 @@ mod tests {
         );
         let m = measure_note(&x, SR, f0, MeasureConfig::default()).expect("no measurement");
         assert!(
-            !m.has(Concern::BeatingUnison),
+            !m.has(Concern::StringsBeating),
             "a single string was reported as beating, spread {:?}",
-            m.unison_spread_cents
+            m.beat_spread_cents
         );
     }
 

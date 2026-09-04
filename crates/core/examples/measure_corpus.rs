@@ -17,7 +17,9 @@ use std::path::Path;
 
 use stiffstring_core::curve::{solve, CurveConfig};
 use stiffstring_core::inharmonicity::{measure_note, MeasureConfig};
-use stiffstring_core::piano::{fit_model, key_name, key_nominal_hz, NoteSample, KEYS};
+use stiffstring_core::piano::{
+    fit_model, key_name, key_nominal_hz, BeatKind, NoteSample, Stringing, KEYS,
+};
 
 /// Minimal WAV reader: mono, 32-bit float or 16-bit integer.
 fn read_wav(path: &Path) -> Result<(Vec<f32>, f64), String> {
@@ -125,9 +127,14 @@ fn main() {
 
     println!("MEASURING {} NOTES FROM {}\n", files.len(), folder);
     println!(
-        "  {:>4} {:>5} {:>11} {:>9} {:>11} {:>6} {:>6} {:>6} {:>7}  concerns",
-        "key", "note", "measured Hz", "vs ET", "B", "parts", "conf", "rms", "unison"
+        "  {:>4} {:>5} {:>11} {:>9} {:>11} {:>6} {:>6} {:>6} {:>14}  concerns",
+        "key", "note", "measured Hz", "vs ET", "B", "parts", "conf", "rms", "beat"
     );
+
+    // Defaults, and no better than a guess: where a piano changes from one
+    // string to two to three varies between instruments, and getting it wrong
+    // mislabels the fault rather than the measurement.
+    let stringing = Stringing::default();
 
     let mut samples_out: Vec<NoteSample> = Vec::new();
     let mut pitch_offsets: Vec<f64> = Vec::new();
@@ -163,12 +170,21 @@ fn main() {
                 .join(",")
         };
 
-        let unison = m
-            .unison_spread_cents
-            .map_or_else(|| "-".to_string(), |s| format!("{s:.2}\u{a2}"));
+        // The same modulation means different things depending on how the note
+        // is strung, and nothing in the sound establishes that.
+        let beat = m.beat_spread_cents.map_or_else(
+            || "-".to_string(),
+            |s| {
+                let kind = match stringing.beat_kind(*key) {
+                    BeatKind::FalseBeat => "false beat",
+                    BeatKind::Unison => "unison",
+                };
+                format!("{s:.2}\u{a2} {kind}")
+            },
+        );
 
         println!(
-            "  {key:>4} {:>5} {:>11.3} {off:>8.1}\u{a2} {:>11.3e} {:>6} {:>6.3} {:>5.2}\u{a2} {unison:>7}  {concerns}",
+            "  {key:>4} {:>5} {:>11.3} {off:>8.1}\u{a2} {:>11.3e} {:>6} {:>6.3} {:>5.2}\u{a2} {beat:>14}  {concerns}",
             key_name(*key),
             m.f0,
             m.b,

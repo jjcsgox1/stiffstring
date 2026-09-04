@@ -26,7 +26,7 @@
     [4, "poor fit"],
     [8, "unstable partials"],
     [16, "partials rejected"],
-    [32, "beating unison"],
+    [32, "strings beating"],
   ];
 
   function decodeConcerns(bits) {
@@ -124,7 +124,7 @@
           f0: out[base],
           b: out[base + 1],
           rmsCents: out[base + 2],
-          unisonSpreadCents: out[base + 5] || null,
+          beatSpreadCents: out[base + 5] || null,
           concerns: decodeConcerns(out[base + 3]),
           partials,
         };

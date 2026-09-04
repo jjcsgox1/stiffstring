@@ -56,6 +56,73 @@ pub fn key_name(key: u8) -> String {
     format!("{}{}", NAMES[(midi % 12) as usize], midi / 12 - 1)
 }
 
+/// What a beating note means, once we know how it is strung.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BeatKind {
+    /// One string beating against itself — vibrating in two planes at slightly
+    /// different rates, from asymmetry at the bridge or bearing points.
+    ///
+    /// No amount of tuning removes it. It is something to tell the client about,
+    /// not something to correct.
+    FalseBeat,
+    /// Two or three strings out with each other. This is tunable.
+    Unison,
+}
+
+/// How many strings each note has.
+///
+/// Pianos are strung in three bands: a handful of single wound strings at the
+/// very bottom, then pairs, then triples for most of the instrument. Where the
+/// transitions fall differs from piano to piano.
+///
+/// This is what turns a measurement into a diagnosis. The engine hears amplitude
+/// modulation and can say how fast; whether that is a unison wanting attention
+/// or a false beat that no tuning will cure depends entirely on how many strings
+/// are there, which no amount of listening can establish. Reporting a "unison
+/// spread" on a single-strung bass note is confidently wrong — which is exactly
+/// what happened on the first real piano measured, where C1 showed the largest
+/// beat on the instrument and has only one string.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Stringing {
+    /// Highest key strung with a single string.
+    pub single_through: u8,
+    /// Highest key strung with two.
+    pub double_through: u8,
+}
+
+impl Default for Stringing {
+    /// A common arrangement, and no more than a starting point — the transitions
+    /// vary enough between instruments that this should be corrected per piano
+    /// rather than trusted.
+    fn default() -> Self {
+        Self {
+            single_through: 8,   // A0 to E1
+            double_through: 16,  // F1 to C2
+        }
+    }
+}
+
+impl Stringing {
+    pub fn strings_at(&self, key: u8) -> u8 {
+        if key <= self.single_through {
+            1
+        } else if key <= self.double_through {
+            2
+        } else {
+            3
+        }
+    }
+
+    /// What beating on this note means.
+    pub fn beat_kind(&self, key: u8) -> BeatKind {
+        if self.strings_at(key) == 1 {
+            BeatKind::FalseBeat
+        } else {
+            BeatKind::Unison
+        }
+    }
+}
+
 /// One note measured on a real piano, ready to inform the model.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct NoteSample {
@@ -641,6 +708,33 @@ mod tests {
     }
 
     #[test]
+    fn beating_means_different_things_depending_on_the_stringing() {
+        // The distinction that matters in the field. The engine hears a note's
+        // amplitude rise and fall and can say how fast; only the stringing says
+        // whether that is a unison wanting attention or a false beat that no
+        // tuning will cure. Measured on a real baby grand, C1 showed the widest
+        // beat on the instrument — and C1 there has one string.
+        let s = Stringing::default();
+        assert_eq!(s.strings_at(1), 1, "A0 is single strung");
+        assert_eq!(s.strings_at(4), 1, "C1 is single strung");
+        assert_eq!(s.beat_kind(4), BeatKind::FalseBeat);
+
+        assert_eq!(s.strings_at(12), 2);
+        assert_eq!(s.beat_kind(12), BeatKind::Unison);
+
+        assert_eq!(s.strings_at(40), 3, "C4 is triple strung");
+        assert_eq!(s.beat_kind(40), BeatKind::Unison);
+
+        // And it is adjustable, because the transitions move between pianos.
+        let late = Stringing {
+            single_through: 12,
+            double_through: 20,
+        };
+        assert_eq!(late.beat_kind(10), BeatKind::FalseBeat);
+        assert_eq!(late.strings_at(21), 3);
+    }
+
+    #[test]
     fn keys_map_to_the_right_notes() {
         assert_eq!(key_name(1), "A0");
         assert_eq!(key_name(4), "C1");
@@ -832,7 +926,7 @@ mod tests {
             b: 3e-4,
             partials: (1..=6).map(|n| partial(n, 0.99)).collect(),
             rms_cents: 0.1,
-            unison_spread_cents: None,
+            beat_spread_cents: None,
             concerns: vec![],
         };
         let clean = NoteSample::from_measurement(40, &base);

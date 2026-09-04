@@ -93,7 +93,7 @@ fn concern_bits(concerns: &[Concern]) -> f64 {
             Concern::PoorFit => 4,
             Concern::UnstablePartials => 8,
             Concern::PartialsRejected => 16,
-            Concern::BeatingUnison => 32,
+            Concern::StringsBeating => 32,
         };
     }
     f64::from(bits)
@@ -163,7 +163,7 @@ pub unsafe extern "C" fn ss_measure_note(
     dst[4] = m.partials.len() as f64;
     // Zero stands for "not beating". A beat of exactly no hertz is not a thing a
     // string can do, so the value is free to carry the meaning.
-    dst[5] = m.unison_spread_cents.unwrap_or(0.0);
+    dst[5] = m.beat_spread_cents.unwrap_or(0.0);
     for (i, p) in m.partials.iter().enumerate() {
         let base = NOTE_HEADER + i * PARTIAL_STRIDE;
         dst[base] = f64::from(p.n);
