@@ -24,3 +24,21 @@ The full plan, with the decisions log and the reasoning behind each choice, live
 
 Served by GitHub Pages from the repository root. The microphone requires HTTPS, so the
 pages cannot be tested by opening the files directly from disk.
+
+## Building
+
+Tests and the accuracy reports:
+
+    cargo test --all
+    cargo run -p stiffstring-core --example accuracy --release
+    cargo run -p stiffstring-core --example tuning_curve --release
+
+The engine for the web app. There is no JavaScript build step and no npm; this
+produces a `.wasm` that plain script tags load:
+
+    cargo build -p stiffstring-wasm --target wasm32-unknown-unknown --release
+    cp target/wasm32-unknown-unknown/release/stiffstring_wasm.wasm wasm/stiffstring.wasm
+
+`wasm/stiffstring.wasm` is committed because GitHub Pages serves it. Rebuild and
+copy it in the same commit as any change to `crates/wasm/src/lib.rs`, and keep
+the data layouts there in step with `wasm/stiffstring.js`.

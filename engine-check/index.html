@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Stiffstring Engine Check</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ground:#101319; --panel:#171b23; --panel-hi:#1e242e; --line:#2b323e;
+  --ink:#e7ebf2; --dim:#8b95a4; --brass:#c9a15a; --brass-soft:#8a6f3d;
+  --good:#56b38a; --bad:#d9645a;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --cond:"IBM Plex Sans Condensed","IBM Plex Sans",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.55;-webkit-text-size-adjust:100%}
+.wrap{max-width:720px;margin:0 auto;padding:18px 16px 80px}
+header{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;padding-bottom:12px;border-bottom:1px solid var(--line);margin-bottom:18px}
+h1{font-family:var(--cond);font-weight:600;font-size:21px;margin:0;letter-spacing:.02em;color:var(--brass)}
+header .sub{color:var(--dim);font-size:13px;margin:0}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:4px;margin-bottom:14px;overflow:hidden}
+.phead{display:flex;align-items:center;gap:10px;padding:9px 14px;background:var(--panel-hi);border-bottom:1px solid var(--line)}
+.pnum{font-family:var(--mono);font-size:11px;color:var(--brass-soft);border:1px solid var(--brass-soft);border-radius:2px;padding:1px 5px;flex:none}
+.ptitle{font-family:var(--cond);font-weight:600;text-transform:uppercase;letter-spacing:.09em;font-size:13px;margin:0;flex:1}
+.pill{font-family:var(--mono);font-size:11px;letter-spacing:.04em;padding:2px 8px;border-radius:2px;border:1px solid var(--line);color:var(--dim);white-space:nowrap;flex:none}
+.pill.good{color:var(--good);border-color:#2f5c48}
+.pill.bad{color:var(--bad);border-color:#6b3430}
+.pill.busy{color:var(--brass);border-color:var(--brass-soft)}
+.pbody{padding:14px}
+.pbody>*+*{margin-top:12px}
+p{margin:0}
+.note{color:var(--dim);font-size:13px}
+button{font-family:var(--sans);font-size:14px;font-weight:500;background:var(--brass);color:#1a1409;border:1px solid var(--brass);border-radius:3px;padding:10px 16px;cursor:pointer;font-weight:600}
+button:hover:not(:disabled){background:#dcb164}
+button:disabled{opacity:.4;cursor:default}
+button:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+dl.kv{display:grid;grid-template-columns:auto 1fr;gap:5px 16px;margin:0}
+dl.kv dt{font-size:13px;color:var(--dim)}
+dl.kv dd{margin:0;font-family:var(--mono);font-size:13px;font-variant-numeric:tabular-nums;word-break:break-word}
+dd.good{color:var(--good)} dd.bad{color:var(--bad)} dd.warn{color:var(--brass)}
+table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12.5px;font-variant-numeric:tabular-nums}
+th,td{text-align:right;padding:5px 8px;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+th{font-family:var(--cond);text-transform:uppercase;letter-spacing:.08em;font-size:11px;color:var(--dim);font-weight:600}
+td.good{color:var(--good)} td.bad{color:var(--bad)}
+.scroll{overflow-x:auto}
+textarea{width:100%;height:180px;background:#0a0d11;color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:10px;font-family:var(--mono);font-size:12px;line-height:1.5;resize:vertical}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Stiffstring Engine Check</h1>
+  <p class="sub">Does the measurement engine run correctly on <em>this</em> device?</p>
+</header>
+
+<div class="panel">
+  <div class="phead">
+    <span class="pnum">1</span>
+    <h2 class="ptitle">Load</h2>
+    <span class="pill" id="p1">not started</span>
+  </div>
+  <div class="pbody">
+    <p class="note">The engine is Rust compiled to WebAssembly. It is graded here against tones
+      built in the browser whose fundamental and stiffness we chose, so the right answer is known
+      before the engine is asked.</p>
+    <div><button id="btnRun">Run the checks</button></div>
+    <dl class="kv" id="loadInfo"></dl>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="phead">
+    <span class="pnum">2</span>
+    <h2 class="ptitle">Measuring notes</h2>
+    <span class="pill" id="p2">waiting</span>
+  </div>
+  <div class="pbody">
+    <div class="scroll"><table id="noteTbl"><thead><tr>
+      <th>Note</th><th>True f0</th><th>Found</th><th>Error</th><th>True B</th><th>Found B</th><th>B error</th><th>ms</th>
+    </tr></thead><tbody></tbody></table></div>
+    <p class="note">Synthetic piano tones with decay, a noise floor, and the partial structure of
+      their register. Bass tones are built without a fundamental, as a real one arrives.</p>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="phead">
+    <span class="pnum">3</span>
+    <h2 class="ptitle">Whole-piano curve</h2>
+    <span class="pill" id="p3">waiting</span>
+  </div>
+  <div class="pbody">
+    <dl class="kv" id="curveInfo"></dl>
+    <div class="scroll"><table id="curveTbl"><thead><tr>
+      <th>Key</th><th>Note</th><th>Target Hz</th><th>Stretch</th>
+    </tr></thead><tbody></tbody></table></div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="phead">
+    <span class="pnum">&#9662;</span>
+    <h2 class="ptitle">Results</h2>
+    <span class="pill" id="p4">nothing yet</span>
+  </div>
+  <div class="pbody">
+    <p class="note">Copy this back into the chat.</p>
+    <div><button id="btnCopy" disabled>Copy results</button></div>
+    <textarea id="report" readonly spellcheck="false"></textarea>
+  </div>
+</div>
+
+</div>
+<script src="../wasm/stiffstring.js"></script>
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const SR = 48000;
+const NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+const keyName = k => { const m = k + 20; return NAMES[m % 12] + (Math.floor(m / 12) - 1); };
+const lines = [];
+
+function setPill(sel, text, cls){
+  const el = $(sel);
+  el.textContent = text;
+  el.className = "pill" + (cls ? " " + cls : "");
+}
+function kv(el, rows){
+  el.innerHTML = "";
+  for (const [k, v, cls] of rows){
+    const dt = document.createElement("dt"); dt.textContent = k;
+    const dd = document.createElement("dd"); dd.textContent = v;
+    if (cls) dd.className = cls;
+    el.append(dt, dd);
+  }
+}
+const cents = (from, to) => 1200 * Math.log2(to / from);
+const partialHz = (f0, b, n) => n * f0 * Math.sqrt(1 + b * n * n);
+
+/* A piano-like tone with a known fundamental and stiffness. */
+function synth(f0, b, opts){
+  const o = Object.assign({ seconds:1.5, partials:10, amp:0.4, rolloff:1.0, t60:6, decayExp:0.7, noiseDb:-65, skipBelow:0 }, opts);
+  const n = Math.round(SR * o.seconds);
+  const out = new Float32Array(n);
+  const ln1000 = Math.log(1000);
+
+  for (let k = 1; k <= o.partials; k++){
+    // Bass notes reach the microphone without their lowest partials, which is
+    // the case the engine most has to cope with.
+    if (k <= o.skipBelow) continue;
+    const hz = partialHz(f0, b, k);
+    if (hz >= SR / 2) break;
+    const amp = o.amp * Math.pow(k, -o.rolloff);
+    const lambda = ln1000 / (o.t60 / Math.pow(k, o.decayExp));
+    const w = 2 * Math.PI * hz / SR;
+    const phase = 0.7 * k;
+    for (let i = 0; i < n; i++){
+      out[i] += amp * Math.exp(-lambda * i / SR) * Math.sin(w * i + phase);
+    }
+  }
+
+  if (o.noiseDb > -200){
+    const sigma = Math.pow(10, o.noiseDb / 20);
+    let s = 12345;
+    for (let i = 0; i < n; i++){
+      s = (s * 1103515245 + 12345) & 0x7fffffff;
+      const u1 = Math.max((s / 0x7fffffff), 1e-12);
+      s = (s * 1103515245 + 12345) & 0x7fffffff;
+      const u2 = s / 0x7fffffff;
+      out[i] += sigma * Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+    }
+  }
+  return out;
+}
+
+const CASES = [
+  { key:1,  name:"A0", f0:27.50,  b:1.20e-3, opts:{ partials:14, rolloff:-0.8, t60:14, decayExp:0.45, skipBelow:2, seconds:2.0 } },
+  { key:13, name:"A1", f0:55.00,  b:4.00e-4, opts:{ partials:14, rolloff:-0.4, t60:12, decayExp:0.5, skipBelow:1, seconds:2.0 } },
+  { key:25, name:"A2", f0:110.00, b:1.20e-4, opts:{ partials:12 } },
+  { key:37, name:"A3", f0:220.63, b:3.04e-4, opts:{ partials:12 } },
+  { key:49, name:"A4", f0:441.92, b:7.33e-4, opts:{ partials:10 } },
+  { key:64, name:"C6", f0:1046.5, b:1.90e-3, opts:{ partials:5, t60:2.5, decayExp:1.0, seconds:1.2 } },
+  { key:76, name:"C7", f0:2093.0, b:4.00e-3, opts:{ partials:4, t60:1.8, decayExp:1.0, seconds:1.2 } },
+];
+
+async function run(){
+  $("#btnRun").disabled = true;
+  lines.length = 0;
+  lines.push("STIFFSTRING ENGINE CHECK");
+  lines.push(new Date().toISOString());
+  lines.push(navigator.userAgent);
+  lines.push("");
+
+  setPill("#p1", "loading", "busy");
+  let engine;
+  const t0 = performance.now();
+  try {
+    engine = await Stiffstring.load("../wasm/stiffstring.wasm");
+  } catch(e){
+    setPill("#p1", "failed", "bad");
+    kv($("#loadInfo"), [["Error", String(e.message || e), "bad"]]);
+    lines.push("LOAD FAILED: " + (e.message || e));
+    finish();
+    return;
+  }
+  const loadMs = performance.now() - t0;
+  setPill("#p1", "loaded", "good");
+  kv($("#loadInfo"), [
+    ["Engine ABI", String(engine.abiVersion), "good"],
+    ["Load time", loadMs.toFixed(0) + " ms"],
+    ["A4 check", engine.keyNominalHz(49, 440).toFixed(4) + " Hz",
+      Math.abs(engine.keyNominalHz(49, 440) - 440) < 1e-9 ? "good" : "bad"],
+  ]);
+  lines.push("LOAD");
+  lines.push("  abi " + engine.abiVersion + ", " + loadMs.toFixed(0) + " ms");
+  lines.push("");
+
+  // --- notes ---
+  setPill("#p2", "measuring", "busy");
+  const tb = $("#noteTbl tbody");
+  tb.innerHTML = "";
+  lines.push("NOTES");
+  let worstF0 = 0, worstB = 0, slowest = 0, failures = 0;
+
+  for (const c of CASES){
+    const samples = synth(c.f0, c.b, c.opts);
+    const started = performance.now();
+    const m = engine.measureNote(samples, SR, c.f0);
+    const ms = performance.now() - started;
+    slowest = Math.max(slowest, ms);
+
+    const tr = document.createElement("tr");
+    if (!m){
+      failures++;
+      tr.innerHTML = "<td>" + c.name + "</td><td>" + c.f0.toFixed(2) +
+        '</td><td colspan="5" class="bad">no measurement</td><td>' + ms.toFixed(0) + "</td>";
+      lines.push("  " + c.name + " FAILED");
+    } else {
+      const fErr = cents(c.f0, m.f0);
+      const bErr = 100 * (m.b - c.b) / c.b;
+      worstF0 = Math.max(worstF0, Math.abs(fErr));
+      worstB = Math.max(worstB, Math.abs(bErr));
+      const okF = Math.abs(fErr) < 1.0, okB = Math.abs(bErr) < 10;
+      tr.innerHTML =
+        "<td>" + c.name + "</td>" +
+        "<td>" + c.f0.toFixed(2) + "</td>" +
+        "<td>" + m.f0.toFixed(3) + "</td>" +
+        '<td class="' + (okF ? "good" : "bad") + '">' + fErr.toFixed(3) + "¢</td>" +
+        "<td>" + c.b.toExponential(2) + "</td>" +
+        "<td>" + m.b.toExponential(2) + "</td>" +
+        '<td class="' + (okB ? "good" : "bad") + '">' + bErr.toFixed(2) + "%</td>" +
+        "<td>" + ms.toFixed(0) + "</td>";
+      lines.push("  " + c.name.padEnd(3) + " f0 " + m.f0.toFixed(3) + " (" + fErr.toFixed(3) +
+        "c)  B " + m.b.toExponential(3) + " (" + bErr.toFixed(2) + "%)  " +
+        m.partials.length + " partials  " + ms.toFixed(0) + " ms" +
+        (m.concerns.length ? "  [" + m.concerns.join(", ") + "]" : ""));
+    }
+    tb.appendChild(tr);
+    await new Promise(r => setTimeout(r, 0)); // let the page paint between notes
+  }
+  setPill("#p2", failures ? failures + " failed" : "all measured",
+    failures ? "bad" : (worstF0 < 1 && worstB < 10 ? "good" : "warn"));
+  lines.push("  worst f0 " + worstF0.toFixed(3) + " cents, worst B " + worstB.toFixed(2) +
+    "%, slowest " + slowest.toFixed(0) + " ms");
+  lines.push("");
+
+  // --- curve ---
+  setPill("#p3", "solving", "busy");
+  const bAt = key => {
+    const k = key;
+    return Math.pow(10, k < 28 ? (-2.70 - 0.0415 * (k - 1)) : (-3.70 + 0.0271 * (k - 28)));
+  };
+  const notes = [1,8,16,22,28,34,40,52,64,76,85].map(key => ({
+    key, f0: engine.keyNominalHz(key, 440), b: bAt(key), weight: 1,
+  }));
+
+  const cStart = performance.now();
+  const curve = engine.solveCurve(notes, { a4Hz: 440 });
+  const cMs = performance.now() - cStart;
+
+  lines.push("CURVE");
+  if (!curve){
+    setPill("#p3", "failed", "bad");
+    kv($("#curveInfo"), [["Result", "no curve returned", "bad"]]);
+    lines.push("  FAILED");
+  } else {
+    const a4 = curve.cents[48];
+    const ok = Math.abs(a4) < 0.05 && curve.cents[0] < -5 && curve.cents[87] > 5;
+    setPill("#p3", ok ? "solved" : "suspect", ok ? "good" : "bad");
+    kv($("#curveInfo"), [
+      ["Solve time", cMs.toFixed(1) + " ms"],
+      ["Break found", curve.breakKey ? keyName(curve.breakKey) + " (key " + curve.breakKey + ")" : "none"],
+      ["Model residual", curve.rmsLog10.toFixed(4) + " log10"],
+      ["A4 holds", a4.toFixed(4) + " cents", Math.abs(a4) < 0.05 ? "good" : "bad"],
+      ["Stretch at A0", curve.cents[0].toFixed(2) + " cents", curve.cents[0] < -5 ? "good" : "bad"],
+      ["Stretch at C8", "+" + curve.cents[87].toFixed(2) + " cents", curve.cents[87] > 5 ? "good" : "bad"],
+    ]);
+    const ctb = $("#curveTbl tbody");
+    ctb.innerHTML = "";
+    for (let key = 1; key <= 88; key += 6){
+      const tr = document.createElement("tr");
+      tr.innerHTML = "<td>" + key + "</td><td>" + keyName(key) + "</td><td>" +
+        curve.hz[key-1].toFixed(3) + "</td><td>" + curve.cents[key-1].toFixed(2) + "¢</td>";
+      ctb.appendChild(tr);
+    }
+    lines.push("  solved in " + cMs.toFixed(1) + " ms, break " +
+      (curve.breakKey ? keyName(curve.breakKey) : "none"));
+    lines.push("  A0 " + curve.cents[0].toFixed(2) + "c, A4 " + a4.toFixed(4) +
+      "c, C8 +" + curve.cents[87].toFixed(2) + "c");
+  }
+  finish();
+}
+
+function finish(){
+  $("#report").value = lines.join("\n");
+  $("#btnCopy").disabled = false;
+  $("#btnRun").disabled = false;
+  setPill("#p4", "ready to copy", "good");
+}
+
+$("#btnRun").addEventListener("click", run);
+$("#btnCopy").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText($("#report").value);
+    setPill("#p4", "copied", "good");
+  } catch(e){
+    $("#report").focus(); $("#report").select();
+    setPill("#p4", "select and copy by hand", "warn");
+  }
+});
+</script>
+</body>
+</html>

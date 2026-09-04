@@ -5,3 +5,10 @@ version = 4
 [[package]]
 name = "stiffstring-core"
 version = "0.1.0"
+
+[[package]]
+name = "stiffstring-wasm"
+version = "0.1.0"
+dependencies = [
+ "stiffstring-core",
+]

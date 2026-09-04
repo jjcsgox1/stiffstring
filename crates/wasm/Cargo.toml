@@ -1,0 +1,12 @@
+[package]
+name = "stiffstring-wasm"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "WebAssembly interface to the Stiffstring measurement engine."
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+stiffstring-core = { path = "../core" }
