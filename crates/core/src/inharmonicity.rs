@@ -335,6 +335,75 @@ fn assignment_score(matches: &[(u32, Peak)], f0: f64, b: f64, tolerance_hz: f64)
         .sum()
 }
 
+/// Narrow a recording down to the part where the note is actually sounding.
+///
+/// A recording holds several seconds; a treble note is over in well under one of
+/// them. Analysing the whole file dilutes the note with silence, drops its
+/// signal-to-noise ratio, and spreads the phase measurements across frames that
+/// contain nothing — which is how a perfectly good recording of C7 comes back as
+/// no measurement at all.
+///
+/// Returns the slice to analyse. Errs toward keeping too much: cutting a note
+/// short costs precision, which is recoverable, while cutting into the attack
+/// loses the partials outright.
+fn trim_to_note(samples: &[f32], sample_rate: f64) -> &[f32] {
+    const BLOCK: usize = 1024;
+    if samples.len() < BLOCK * 8 {
+        return samples;
+    }
+
+    let energy: Vec<f64> = samples
+        .chunks(BLOCK)
+        .map(|c| {
+            let sum: f64 = c.iter().map(|&v| f64::from(v) * f64::from(v)).sum();
+            (sum / c.len() as f64).sqrt()
+        })
+        .collect();
+
+    let peak = energy.iter().copied().fold(0.0, f64::max);
+    if peak <= 0.0 {
+        return samples;
+    }
+
+    // Onset: the first block within 20 dB of the loudest, backed up a little so
+    // the attack itself is inside the window.
+    let onset = energy
+        .iter()
+        .position(|&e| e > peak * 0.1)
+        .unwrap_or(0)
+        .saturating_sub(2);
+
+    // End: the last block still 34 dB above nothing, so the tail is used while
+    // it carries signal and dropped once it does not.
+    let last = energy
+        .iter()
+        .rposition(|&e| e > peak * 0.02)
+        .unwrap_or(energy.len() - 1);
+
+    let start = onset * BLOCK;
+    let max_len = (sample_rate * 3.0) as usize;
+    let end = (((last + 1) * BLOCK).min(samples.len())).min(start + max_len);
+
+    // Anything shorter than this cannot support a measurement anyway, so hand
+    // back the original and let the estimator decline for its own reasons.
+    if end.saturating_sub(start) < BLOCK * 8 {
+        return samples;
+    }
+    &samples[start..end]
+}
+
+/// Largest power of two not exceeding `n`, at least `min`.
+fn frame_len_for(available: usize, preferred: usize, min: usize) -> usize {
+    // Refining needs the frames to spread out in time, so a frame may take at
+    // most about a third of what there is.
+    let cap = available / 3;
+    let mut len = preferred;
+    while len > min && len > cap {
+        len /= 2;
+    }
+    len
+}
+
 /// Measure one struck note.
 ///
 /// `f0_hint` is where the fundamental is expected — from the key the technician
@@ -352,6 +421,17 @@ pub fn measure_note(
     if f0_hint <= 0.0 {
         return None;
     }
+
+    // Work on the note, not on the recording that contains it.
+    let samples = trim_to_note(samples, sample_rate);
+    let cfg = MeasureConfig {
+        refine: RefineConfig {
+            frame_len: frame_len_for(samples.len(), cfg.refine.frame_len, 2048),
+            ..cfg.refine
+        },
+        ..cfg
+    };
+
     // Look below the fundamental too, so its absence is a finding rather than an
     // artefact of where we started looking.
     let min_hz = (f0_hint * 0.55).max(18.0);
@@ -417,8 +497,15 @@ pub fn measure_note(
         })
         .collect();
     if let Some(fit) = fit_inharmonicity(&anchor_obs) {
-        f0 = fit.f0;
-        b = fit.b;
+        // Only accept the sharpened values if they stayed near the note we were
+        // told to expect. The fit is free to move the fundamental anywhere, and
+        // a numbering that is off by one fits its own partials beautifully while
+        // placing the fundamental a whole tone away — the worst possible failure,
+        // because it is confident and wrong rather than merely noisy.
+        if cents(f0_hint, fit.f0).abs() <= cfg.hint_tolerance_cents {
+            f0 = fit.f0;
+            b = fit.b;
+        }
     }
 
     // Now take every partial we can reach, and measure each one properly.
@@ -488,6 +575,16 @@ pub fn measure_note(
 
     let used: Vec<&MeasuredPartial> = partials.iter().filter(|p| p.used).collect();
     if used.len() < cfg.min_partials {
+        return None;
+    }
+
+    // Last guard against a mis-numbered partial series. If the fundamental has
+    // ended up further from the expected note than the caller said it could be,
+    // the numbering is wrong, and every quality signal will look excellent
+    // because the wrong numbering is internally consistent. Declining is the
+    // only safe answer: a missing measurement is obvious, a confident wrong one
+    // silently poisons the keyboard model built on top of it.
+    if cents(f0_hint, final_fit.f0).abs() > cfg.hint_tolerance_cents {
         return None;
     }
 
