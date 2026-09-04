@@ -48,15 +48,19 @@ fn read_wav(path: &Path) -> Result<(Vec<f32>, f64), String> {
         } else if id == b"data" {
             match (format, bits) {
                 (3, 32) => {
-                    samples = bytes[body..body + size]
-                        .chunks_exact(4)
-                        .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+                    samples = (0..size / 4)
+                        .map(|i| {
+                            let o = body + i * 4;
+                            f32::from_le_bytes([bytes[o], bytes[o + 1], bytes[o + 2], bytes[o + 3]])
+                        })
                         .collect();
                 }
                 (1, 16) => {
-                    samples = bytes[body..body + size]
-                        .chunks_exact(2)
-                        .map(|c| f32::from(i16::from_le_bytes([c[0], c[1]])) / 32768.0)
+                    samples = (0..size / 2)
+                        .map(|i| {
+                            let o = body + i * 2;
+                            f32::from(i16::from_le_bytes([bytes[o], bytes[o + 1]])) / 32768.0
+                        })
                         .collect();
                 }
                 _ => return Err(format!("unsupported format {format}, {bits} bits")),
@@ -121,8 +125,8 @@ fn main() {
 
     println!("MEASURING {} NOTES FROM {}\n", files.len(), folder);
     println!(
-        "  {:>4} {:>5} {:>11} {:>9} {:>11} {:>6} {:>6} {:>6}  {}",
-        "key", "note", "measured Hz", "vs ET", "B", "parts", "conf", "rms", "concerns"
+        "  {:>4} {:>5} {:>11} {:>9} {:>11} {:>6} {:>6} {:>6} {:>7}  concerns",
+        "key", "note", "measured Hz", "vs ET", "B", "parts", "conf", "rms", "unison"
     );
 
     let mut samples_out: Vec<NoteSample> = Vec::new();
@@ -159,8 +163,12 @@ fn main() {
                 .join(",")
         };
 
+        let unison = m
+            .unison_spread_cents
+            .map_or_else(|| "-".to_string(), |s| format!("{s:.2}\u{a2}"));
+
         println!(
-            "  {key:>4} {:>5} {:>11.3} {off:>8.1}\u{a2} {:>11.3e} {:>6} {:>6.3} {:>5.2}\u{a2}  {concerns}",
+            "  {key:>4} {:>5} {:>11.3} {off:>8.1}\u{a2} {:>11.3e} {:>6} {:>6.3} {:>5.2}\u{a2} {unison:>7}  {concerns}",
             key_name(*key),
             m.f0,
             m.b,

@@ -823,6 +823,7 @@ mod tests {
             hz: 220.0 * f64::from(n),
             amplitude: 0.1,
             confidence,
+            beat_hz: None,
             residual_cents: 0.0,
             used: true,
         };
@@ -831,6 +832,7 @@ mod tests {
             b: 3e-4,
             partials: (1..=6).map(|n| partial(n, 0.99)).collect(),
             rms_cents: 0.1,
+            unison_spread_cents: None,
             concerns: vec![],
         };
         let clean = NoteSample::from_measurement(40, &base);

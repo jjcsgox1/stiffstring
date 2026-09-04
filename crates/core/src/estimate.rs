@@ -57,8 +57,20 @@ pub struct Refined {
     /// RMS deviation from a straight-line phase fit, in radians. Small means one
     /// clean sinusoid; large means beating, a false beat, or noise.
     pub phase_residual: f64,
-    /// `phase_residual` mapped to 0..1 for convenience. Heuristic.
+    /// Trust in this measurement, 0 to 1. Heuristic, and deliberately forgiving
+    /// of wobble that [`beat_hz`](Self::beat_hz) accounts for.
     pub confidence: f64,
+    /// Rate at which this partial's amplitude rises and falls, when a single
+    /// coherent beat explains the wobble.
+    ///
+    /// On a real piano this is the normal case, not a fault: nearly every note
+    /// has two or three strings, and a partial is therefore two or three
+    /// closely spaced components rather than one. What it beats at tells us how
+    /// far apart they are.
+    pub beat_hz: Option<f64>,
+    /// How much of the amplitude wobble that one beat accounts for, 0 to 1.
+    /// High means two clean strings; low means noise, or something messier.
+    pub beat_strength: f64,
 }
 
 /// How to spend the available signal when refining.
@@ -76,7 +88,11 @@ impl Default for RefineConfig {
     fn default() -> Self {
         Self {
             frame_len: 8192,
-            frames: 8,
+            // Enough measurements across the note to see the amplitude rise and
+            // fall, not merely to fit a line through its phase. Two strings a
+            // couple of cents apart beat a few times a second, and a handful of
+            // samples cannot show that.
+            frames: 32,
             window: Window::BlackmanHarris,
         }
     }
@@ -165,6 +181,210 @@ pub fn noise_floor(samples: &[f32]) -> f64 {
     amps[amps.len() / 2]
 }
 
+/// One look at the component near a chosen frequency: its complex amplitude at
+/// one instant.
+#[derive(Clone, Copy, Debug)]
+struct Look {
+    t: f64,
+    re: f64,
+    im: f64,
+}
+
+impl Look {
+    #[inline]
+    fn magnitude(&self) -> f64 {
+        self.re.hypot(self.im)
+    }
+}
+
+/// Follow one component's complex amplitude across the note.
+///
+/// Multiplying the signal by an oscillator at `hz` and averaging over a window
+/// leaves the amplitude and phase of whatever sits near that frequency: the same
+/// quantity one FFT bin carries, obtained without computing the several thousand
+/// bins we would discard. That is cheaper by more than an order of magnitude,
+/// which is what makes it affordable to take dozens of looks across a note
+/// rather than a handful — and dozens are needed to watch an amplitude rise and
+/// fall, which is how beating strings betray themselves.
+///
+/// It also removes scalloping loss. A bin measures the frequency it is centred
+/// on; this measures the frequency we ask for, so a partial between bins is no
+/// longer under-read.
+fn trajectory(
+    samples: &[f32],
+    sample_rate: f64,
+    hz: f64,
+    frame_len: usize,
+    hop: usize,
+    frames: usize,
+    kind: Window,
+) -> Vec<Look> {
+    let w = window(kind, frame_len);
+    // A real signal splits its energy between positive and negative frequency,
+    // so half the window sum recovers the true amplitude.
+    let norm = w.iter().sum::<f64>() / 2.0;
+    if norm <= 0.0 {
+        return Vec::new();
+    }
+
+    // The oscillator's samples within a frame are the same for every frame, so
+    // they are built once. Only the frame's starting phase differs, and that is
+    // one rotation applied afterwards.
+    let step = TAU * hz / sample_rate;
+    let table: Vec<(f64, f64)> = (0..frame_len)
+        .map(|i| {
+            let (sin, cos) = (-step * i as f64).sin_cos();
+            (cos, sin)
+        })
+        .collect();
+
+    let mut out = Vec::with_capacity(frames);
+    for j in 0..frames {
+        let start = j * hop;
+        if start + frame_len > samples.len() {
+            break;
+        }
+        let mut re = 0.0;
+        let mut im = 0.0;
+        for (i, &(cos, sin)) in table.iter().enumerate() {
+            let x = f64::from(samples[start + i]) * w[i];
+            re += x * cos;
+            im += x * sin;
+        }
+        // Refer the phase to absolute time rather than to the frame's start, so
+        // successive looks share one clock and their phases can be compared.
+        let (sin, cos) = (-step * start as f64).sin_cos();
+        out.push(Look {
+            t: start as f64 / sample_rate,
+            re: (re * cos - im * sin) / norm,
+            im: (re * sin + im * cos) / norm,
+        });
+    }
+    out
+}
+
+/// Slowest and fastest beat worth looking for, in Hz.
+///
+/// Below the slow end a beat cannot be told from the note simply decaying within
+/// the window; above the fast end it stops being a beat and becomes roughness.
+const BEAT_MIN_HZ: f64 = 0.4;
+const BEAT_MAX_HZ: f64 = 12.0;
+
+/// How many cycles of a beat must fit inside the window before it is believed.
+const MIN_BEAT_CYCLES: f64 = 1.5;
+
+/// Smallest modulation, in natural-log amplitude units, that counts as beating.
+/// About twelve percent — far beyond what a noise floor produces, and far below
+/// what two strings do.
+const MIN_BEAT_DEPTH: f64 = 0.12;
+
+/// Phase wobble, in radians, at which a partial is worth nothing.
+///
+/// Calibrated against real notes rather than synthetic ones. A lone synthetic
+/// string holds phase to a few hundredths of a radian, and an earlier threshold
+/// of a quarter radian was set from exactly that — which marked almost every
+/// note of a real piano untrustworthy, because real notes have two or three
+/// strings and genuinely do wobble. The measurements were fine; the yardstick
+/// was not.
+const UNUSABLE_PHASE_WOBBLE: f64 = 0.6;
+
+/// Look for a single coherent rise and fall in a component's amplitude.
+///
+/// Returns the rate and how much of the wobble it accounts for.
+///
+/// Works on the logarithm of the amplitude, where the note's decay is a straight
+/// line and can be removed by subtraction. Deep nulls — which is what two evenly
+/// matched strings produce — are clipped rather than allowed to run to negative
+/// infinity and dominate everything.
+fn detect_beat(looks: &[Look], sample_rate_of_looks: f64) -> (Option<f64>, f64) {
+    if looks.len() < 10 {
+        return (None, 0.0);
+    }
+    let peak = looks.iter().map(Look::magnitude).fold(0.0, f64::max);
+    if peak <= 0.0 {
+        return (None, 0.0);
+    }
+
+    let floor = peak * 0.02;
+    let logs: Vec<f64> = looks.iter().map(|l| l.magnitude().max(floor).ln()).collect();
+    let times: Vec<f64> = looks.iter().map(|l| l.t).collect();
+
+    // Remove the decay, which in this domain is a straight line.
+    let n = logs.len() as f64;
+    let mean_t = times.iter().sum::<f64>() / n;
+    let mean_l = logs.iter().sum::<f64>() / n;
+    let sxx: f64 = times.iter().map(|t| (t - mean_t) * (t - mean_t)).sum();
+    if sxx <= 0.0 {
+        return (None, 0.0);
+    }
+    let sxy: f64 = times
+        .iter()
+        .zip(&logs)
+        .map(|(t, l)| (t - mean_t) * (l - mean_l))
+        .sum();
+    let slope = sxy / sxx;
+    let residual: Vec<f64> = times
+        .iter()
+        .zip(&logs)
+        .map(|(t, l)| l - (mean_l + slope * (t - mean_t)))
+        .collect();
+
+    let energy: f64 = residual.iter().map(|r| r * r).sum();
+    if energy <= 1e-12 {
+        return (None, 0.0); // perfectly steady: one string, or one that sounds like it
+    }
+
+    // Nothing above half the rate we are sampling the amplitude at can be
+    // believed, so do not look there.
+    let ceiling = BEAT_MAX_HZ.min(sample_rate_of_looks / 2.0);
+
+    // Nor below what the window can actually show. Claiming a beat from less
+    // than about one and a half cycles is indistinguishable from claiming that
+    // the note got quieter and then slightly less quiet, so the slow end is set
+    // by how long we watched rather than by preference. The cost is real: a
+    // unison tight enough to beat slower than this goes unreported — but a
+    // unison that tight is not one the technician needs telling about.
+    let span = times[times.len() - 1] - times[0];
+    if span <= 0.0 {
+        return (None, 0.0);
+    }
+    let floor_hz = (MIN_BEAT_CYCLES / span).max(BEAT_MIN_HZ);
+    if floor_hz >= ceiling {
+        return (None, 0.0);
+    }
+
+    let steps = 240;
+    let mut best = (0.0f64, 0.0f64); // (amplitude, hz)
+    for i in 0..=steps {
+        let f = floor_hz + (ceiling - floor_hz) * i as f64 / f64::from(steps);
+        let (mut re, mut im) = (0.0, 0.0);
+        for (t, r) in times.iter().zip(&residual) {
+            let (sin, cos) = (TAU * f * t).sin_cos();
+            re += r * cos;
+            im -= r * sin;
+        }
+        // A sinusoid of amplitude A correlates to A*n/2 against its own frequency.
+        let amplitude = 2.0 * re.hypot(im) / n;
+        if amplitude > best.0 {
+            best = (amplitude, f);
+        }
+    }
+
+    // Share of the wobble that one rate explains.
+    //
+    // The thresholds are set well above what noise reaches by luck. Scanning
+    // hundreds of candidate rates and keeping the best will always explain some
+    // of any residual — with a few dozen looks that alone clears a third of the
+    // variance often enough to matter — so a beat has to be both coherent and
+    // deep before it is believed. Two strings produce something unmistakable.
+    let explained = ((n * best.0 * best.0 / 2.0) / energy).min(1.0);
+    if explained > 0.5 && best.0 > MIN_BEAT_DEPTH {
+        (Some(best.1), explained)
+    } else {
+        (None, explained)
+    }
+}
+
 /// Pin down one partial near `approx_hz` by fitting a line to its phase.
 ///
 /// `approx_hz` must be within half the wrap limit of the truth — see
@@ -182,9 +402,7 @@ pub fn refine(
     if !n.is_power_of_two() || cfg.frames < 2 || samples.len() < n {
         return None;
     }
-    let bin = bin_hz(sample_rate, n);
-    let k = (approx_hz / bin).round() as usize;
-    if k < 1 || k >= n / 2 {
+    if approx_hz.is_nan() || approx_hz <= 0.0 || approx_hz >= sample_rate / 2.0 {
         return None;
     }
 
@@ -192,58 +410,40 @@ pub fn refine(
     if hop == 0 {
         return None;
     }
-    let w = window(cfg.window, n);
-    let scale = 2.0 / (n as f64 * crate::fft::coherent_gain(&w));
 
-    // Measure phase at each frame, then unwrap against where a sinusoid of
-    // exactly `approx_hz` would have been. What remains is a straight line whose
-    // slope is the frequency error.
-    let mut times = Vec::with_capacity(cfg.frames);
-    let mut residuals = Vec::with_capacity(cfg.frames);
-    let mut frame_amps = Vec::with_capacity(cfg.frames);
+    let looks = trajectory(samples, sample_rate, approx_hz, n, hop, cfg.frames, cfg.window);
+    if looks.len() < 2 {
+        return None;
+    }
+
+    // Phase, unwrapped against an oscillator running at exactly `approx_hz`.
+    // What is left is a straight line whose slope is the frequency error.
+    let mut times = Vec::with_capacity(looks.len());
+    let mut residuals = Vec::with_capacity(looks.len());
+    let mut frame_amps = Vec::with_capacity(looks.len());
     let mut amplitude_sum = 0.0;
     let mut previous = 0.0;
 
-    for j in 0..cfg.frames {
-        let start = j * hop;
-        let frame = &samples[start..start + n];
-        let spec = spectrum(frame, &w);
-        let c = spec[k];
-
-        // Interpolate across the peak rather than trusting one bin: a partial
-        // between bins under-reads by up to 0.8 dB otherwise, making a partial's
-        // apparent strength depend on where it happened to fall.
-        let amp = if k >= 1 && k + 1 < n / 2 {
-            parabolic_peak(
-                spec[k - 1].abs() * scale,
-                c.abs() * scale,
-                spec[k + 1].abs() * scale,
-            )
-            .1
-        } else {
-            c.abs() * scale
-        };
+    for (j, look) in looks.iter().enumerate() {
+        let amp = look.magnitude();
         amplitude_sum += amp;
         frame_amps.push(amp);
 
-        let t = start as f64 / sample_rate;
-        let expected = TAU * approx_hz * t;
-        let measured = c.arg();
-
+        let measured = look.im.atan2(look.re);
         let r = if j == 0 {
-            wrap(measured - expected)
+            measured
         } else {
             // Continue the line rather than wrapping independently, so a steady
             // drift accumulates instead of folding back on itself.
-            previous + wrap(measured - expected - previous)
+            previous + wrap(measured - previous)
         };
         previous = r;
-        times.push(t);
+        times.push(look.t);
         residuals.push(r);
     }
 
-    // Least squares through (t, phase residual), weighted by each frame's
-    // amplitude squared.
+    // Least squares through (t, phase), weighted by each look's amplitude
+    // squared.
     //
     // This matters most in the treble, where partials die within half a second:
     // the later frames are then reading phase out of noise, and weighting every
@@ -279,14 +479,25 @@ pub fn refine(
     }
     let phase_residual = (sse / wsum).sqrt();
 
+    let (beat_hz, beat_strength) = detect_beat(&looks, sample_rate / hop as f64);
+
+    // A partial that wobbles because two strings are beating is not an unreliable
+    // measurement — it is a correct measurement of a note with two strings, which
+    // is nearly every note on a piano. Penalising that as heavily as incoherent
+    // noise would mark almost the whole instrument untrustworthy, which is
+    // exactly what happened on the first real recordings.
+    //
+    // So wobble the beat accounts for is forgiven, and wobble it does not is not.
+    let unexplained = phase_residual * (1.0 - 0.7 * beat_strength.clamp(0.0, 1.0));
+
     Some(Refined {
         hz: approx_hz + slope / TAU,
-        amplitude: amplitude_sum / cfg.frames as f64,
+        amplitude: amplitude_sum / looks.len() as f64,
         phase_residual,
-        // Heuristic: a clean sinusoid sits near zero; a quarter radian of wobble
-        // means something else is going on in that bin.
-        confidence: (1.0 - phase_residual / 0.25).clamp(0.0, 1.0),
-        })
+        confidence: (1.0 - unexplained / UNUSABLE_PHASE_WOBBLE).clamp(0.0, 1.0),
+        beat_hz,
+        beat_strength,
+    })
 }
 
 /// How far `approx_hz` may be from the truth before phase unwrapping becomes
@@ -535,27 +746,46 @@ mod tests {
     }
 
     #[test]
-    fn a_beating_pair_reports_low_confidence() {
-        // Two strings a few cents apart. The phase stops advancing linearly, and
-        // the fit residual is what tells us so. This is the mechanism behind
-        // false-beat and rough-unison detection on neglected pianos.
+    fn a_beating_pair_is_recognised_as_a_beat() {
+        // Two strings six cents apart near 220 Hz beat about 0.76 times a
+        // second. The amplitude rising and falling at a steady rate is the
+        // signature, and reporting the rate is worth far more than merely
+        // noting that the phase misbehaved — it is the unison spread.
         let a = steady(220.61, 0.5);
         let b = StringSpec {
             f0: 220.61 * 2f64.powf(6.0 / 1200.0),
             ..a.clone()
         };
-        let x = tone(vec![a, b], 2.0, None);
+        let x = tone(vec![a, b], 4.0, None);
         let r = refine(&x, SR, 220.61, RefineConfig::default()).unwrap();
+
+        let beat = r.beat_hz.expect("two beating strings reported no beat");
         assert!(
-            r.phase_residual > 0.1,
-            "beating pair should not fit a straight line: residual {:.4} rad",
+            (beat - 0.766).abs() < 0.2,
+            "expected about 0.77 beats a second, measured {beat:.3}"
+        );
+        assert!(
+            r.beat_strength > 0.5,
+            "the beat should account for most of the wobble: {:.2}",
+            r.beat_strength
+        );
+        assert!(
+            r.phase_residual > 0.05,
+            "a beating pair does not fit a straight line: residual {:.4} rad",
             r.phase_residual
         );
+    }
+
+    #[test]
+    fn a_lone_string_reports_no_beat() {
+        let x = tone(vec![steady(220.61, 0.5)], 4.0, Some(-70.0));
+        let r = refine(&x, SR, 220.61, RefineConfig::default()).unwrap();
         assert!(
-            r.confidence < 0.7,
-            "beating pair should not be trusted: confidence {:.3}",
-            r.confidence
+            r.beat_hz.is_none(),
+            "a single string was reported as beating at {:?} Hz",
+            r.beat_hz
         );
+        assert!(r.confidence > 0.9, "confidence {:.3}", r.confidence);
     }
 
     #[test]

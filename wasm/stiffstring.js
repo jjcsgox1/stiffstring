@@ -13,10 +13,10 @@
 (function (global) {
   "use strict";
 
-  const EXPECTED_ABI = 1;
+  const EXPECTED_ABI = 2;
 
-  const NOTE_HEADER = 5;
-  const PARTIAL_STRIDE = 6;
+  const NOTE_HEADER = 6;
+  const PARTIAL_STRIDE = 7;
   const KEYS = 88;
   const CURVE_OUT_LEN = 2 + 2 * KEYS;
 
@@ -26,6 +26,7 @@
     [4, "poor fit"],
     [8, "unstable partials"],
     [16, "partials rejected"],
+    [32, "beating unison"],
   ];
 
   function decodeConcerns(bits) {
@@ -115,12 +116,15 @@
             confidence: out[p + 3],
             residualCents: out[p + 4],
             used: out[p + 5] === 1,
+            // Zero means not beating: no string beats at no hertz.
+            beatHz: out[p + 6] || null,
           });
         }
         return {
           f0: out[base],
           b: out[base + 1],
           rmsCents: out[base + 2],
+          unisonSpreadCents: out[base + 5] || null,
           concerns: decodeConcerns(out[base + 3]),
           partials,
         };

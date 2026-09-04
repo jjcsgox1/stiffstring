@@ -33,7 +33,9 @@ use stiffstring_core::piano::{fit_model, key_nominal_hz, NoteSample, KEYS};
 
 /// Interface version. Bumped whenever a layout below changes, so the loader can
 /// refuse to run against a module it does not understand.
-pub const ABI_VERSION: u32 = 1;
+///
+/// 2: added unison spread per note and beat rate per partial.
+pub const ABI_VERSION: u32 = 2;
 
 #[no_mangle]
 pub extern "C" fn ss_abi_version() -> u32 {
@@ -91,15 +93,16 @@ fn concern_bits(concerns: &[Concern]) -> f64 {
             Concern::PoorFit => 4,
             Concern::UnstablePartials => 8,
             Concern::PartialsRejected => 16,
+            Concern::BeatingUnison => 32,
         };
     }
     f64::from(bits)
 }
 
 /// Number of `f64`s [`ss_measure_note`] writes before the per-partial block.
-const NOTE_HEADER: usize = 5;
+const NOTE_HEADER: usize = 6;
 /// Number of `f64`s per partial.
-const PARTIAL_STRIDE: usize = 6;
+const PARTIAL_STRIDE: usize = 7;
 
 /// Measure one struck note.
 ///
@@ -114,10 +117,13 @@ const PARTIAL_STRIDE: usize = 6;
 /// [1] inharmonicity coefficient
 /// [2] fit residual, cents
 /// [3] concern bits: 1 fundamental missing, 2 few partials, 4 poor fit,
-///                   8 unstable partials, 16 partials rejected
+///                   8 unstable partials, 16 partials rejected,
+///                   32 beating unison
 /// [4] partial count P
-/// then P blocks of 6: partial number, Hz, amplitude, confidence,
-///                     residual cents, used (1 or 0)
+/// [5] unison spread in cents, or 0 if the strings were not heard beating
+/// then P blocks of 7: partial number, Hz, amplitude, confidence,
+///                     residual cents, used (1 or 0),
+///                     beat rate in Hz or 0 if not beating
 /// ```
 ///
 /// Returns the number of `f64`s written, or 0 if the note could not be measured
@@ -135,7 +141,8 @@ pub unsafe extern "C" fn ss_measure_note(
     out: *mut f64,
     out_len: usize,
 ) -> usize {
-    if samples.is_null() || out.is_null() || len == 0 || !(sample_rate > 0.0) {
+    if samples.is_null() || out.is_null() || len == 0 || sample_rate.is_nan() || sample_rate <= 0.0
+    {
         return 0;
     }
     let audio = std::slice::from_raw_parts(samples, len);
@@ -154,6 +161,9 @@ pub unsafe extern "C" fn ss_measure_note(
     dst[2] = m.rms_cents;
     dst[3] = concern_bits(&m.concerns);
     dst[4] = m.partials.len() as f64;
+    // Zero stands for "not beating". A beat of exactly no hertz is not a thing a
+    // string can do, so the value is free to carry the meaning.
+    dst[5] = m.unison_spread_cents.unwrap_or(0.0);
     for (i, p) in m.partials.iter().enumerate() {
         let base = NOTE_HEADER + i * PARTIAL_STRIDE;
         dst[base] = f64::from(p.n);
@@ -162,6 +172,7 @@ pub unsafe extern "C" fn ss_measure_note(
         dst[base + 3] = p.confidence;
         dst[base + 4] = p.residual_cents;
         dst[base + 5] = if p.used { 1.0 } else { 0.0 };
+        dst[base + 6] = p.beat_hz.unwrap_or(0.0);
     }
     needed
 }
@@ -216,8 +227,8 @@ pub unsafe extern "C" fn ss_solve_curve(
         return 0;
     }
     let raw = std::slice::from_raw_parts(samples, count * 4);
-    let notes: Vec<NoteSample> = raw
-        .chunks_exact(4)
+    let notes: Vec<NoteSample> = (0..count)
+        .map(|i| &raw[i * 4..i * 4 + 4])
         .filter(|c| c[0] >= 1.0 && c[0] <= f64::from(KEYS) && c[2] > 0.0)
         .map(|c| NoteSample {
             key: c[0] as u8,
@@ -239,8 +250,8 @@ pub unsafe extern "C" fn ss_solve_curve(
     };
     if !overrides.is_null() && override_count > 0 {
         let raw = std::slice::from_raw_parts(overrides, override_count * 2);
-        cfg.overrides = raw
-            .chunks_exact(2)
+        cfg.overrides = (0..override_count)
+            .map(|i| &raw[i * 2..i * 2 + 2])
             .filter(|c| c[0] >= 1.0 && c[0] <= f64::from(KEYS))
             .map(|c| (c[0] as u8, c[1]))
             .collect();

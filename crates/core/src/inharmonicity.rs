@@ -42,8 +42,11 @@ pub struct MeasuredPartial {
     pub n: u32,
     pub hz: f64,
     pub amplitude: f64,
-    /// From the phase fit: low means beating, a false beat, or noise.
+    /// From the phase fit, forgiving of wobble a beat accounts for.
     pub confidence: f64,
+    /// Rate this partial's amplitude rises and falls, when a single coherent
+    /// beat explains it: two or three strings, or a false beat on one.
+    pub beat_hz: Option<f64>,
     /// Cents from where the fitted model says this partial should be.
     pub residual_cents: f64,
     /// False if the fit rejected it as an outlier.
@@ -61,9 +64,16 @@ pub enum Concern {
     /// Partials do not lie on any stiff-string curve. Usually a badly false
     /// string, or the wrong note.
     PoorFit,
-    /// Partials wobble instead of holding still: a beating unison, or a false
-    /// beat on one string.
+    /// Partials wobble in a way no single beat explains: noise swamping them, a
+    /// badly false string, or three strings all disagreeing.
     UnstablePartials,
+    /// The strings of this note are beating against each other steadily.
+    ///
+    /// Information rather than a fault. Almost every note on a piano has two or
+    /// three strings, and how fast they beat is [the unison
+    /// spread](NoteMeasurement::unison_spread_cents) — something the technician
+    /// wants told, not something the measurement should apologise for.
+    BeatingUnison,
     /// One or more partials were discarded as outliers.
     PartialsRejected,
 }
@@ -78,6 +88,17 @@ pub struct NoteMeasurement {
     pub partials: Vec<MeasuredPartial>,
     /// RMS of the fit residuals, in cents, over the partials actually used.
     pub rms_cents: f64,
+    /// How far apart this note's strings are, in cents, if they are beating.
+    ///
+    /// Derived from how fast each partial beats: two strings `d` cents apart put
+    /// their `n`th partials `f_n * d / 1731` Hz apart, so every beating partial
+    /// is an independent estimate of the same spread and the median of them is
+    /// taken.
+    ///
+    /// This falls out of measuring inharmonicity rather than costing anything
+    /// extra — the reason for measuring unisons as they are rather than muting
+    /// down to one string.
+    pub unison_spread_cents: Option<f64>,
     pub concerns: Vec<Concern>,
 }
 
@@ -511,17 +532,18 @@ pub fn measure_note(
     // Now take every partial we can reach, and measure each one properly.
     let mut partials: Vec<MeasuredPartial> = Vec::new();
     for (n, peak) in assign(&peaks, f0, b, cfg.max_partial, tolerance_hz) {
-        let (hz, amplitude, confidence) =
+        let (hz, amplitude, confidence, beat_hz) =
             match refine(samples, sample_rate, peak.hz, cfg.refine) {
-                Some(r) => (r.hz, r.amplitude, r.confidence),
+                Some(r) => (r.hz, r.amplitude, r.confidence, r.beat_hz),
                 // Too short to refine: the coarse position still beats nothing.
-                None => (peak.hz, peak.amplitude, 0.3),
+                None => (peak.hz, peak.amplitude, 0.3, None),
             };
         partials.push(MeasuredPartial {
             n,
             hz,
             amplitude,
             confidence,
+            beat_hz,
             residual_cents: 0.0,
             used: true,
         });
@@ -588,6 +610,25 @@ pub fn measure_note(
         return None;
     }
 
+    // Every beating partial independently estimates the same string spread, so
+    // take the middle of them rather than any one.
+    let mut spreads: Vec<f64> = used
+        .iter()
+        // Two partials `df` apart at frequency `f` differ by about
+        // `(1200/ln 2) * df / f` cents, which is how a beat rate becomes a
+        // string spread.
+        .filter_map(|p| p.beat_hz.map(|beat| CENTS_PER_LN * beat / p.hz))
+        .filter(|s| s.is_finite() && *s > 0.0)
+        .collect();
+    spreads.sort_by(f64::total_cmp);
+    let unison_spread_cents = if spreads.is_empty() {
+        None
+    } else {
+        Some(spreads[spreads.len() / 2])
+    };
+
+    let beating = used.iter().filter(|p| p.beat_hz.is_some()).count();
+
     let mut concerns = Vec::new();
     if !partials.iter().any(|p| p.n == 1) {
         concerns.push(Concern::FundamentalMissing);
@@ -597,6 +638,13 @@ pub fn measure_note(
     }
     if final_fit.rms_cents > 3.0 {
         concerns.push(Concern::PoorFit);
+    }
+    // Two partials independently showing the same thing is evidence; demanding
+    // a fixed share of them is not, because the lowest partials of a tight
+    // unison beat too slowly for any practical window to resolve and can never
+    // join in.
+    if beating >= 2 {
+        concerns.push(Concern::BeatingUnison);
     }
     if used.iter().filter(|p| p.confidence < 0.6).count() * 2 >= used.len() {
         concerns.push(Concern::UnstablePartials);
@@ -610,9 +658,11 @@ pub fn measure_note(
         b: final_fit.b,
         partials,
         rms_cents: final_fit.rms_cents,
+        unison_spread_cents,
         concerns,
     })
 }
+
 
 #[cfg(test)]
 mod tests {
@@ -817,6 +867,78 @@ mod tests {
             (m.b - b).abs() / b < 0.10,
             "B {:.4e} vs {b:.4e}",
             m.b
+        );
+    }
+
+    #[test]
+    fn a_unison_spread_is_measured_not_merely_noticed() {
+        // Two strings four cents apart — a rough but perfectly ordinary unison.
+        // The spread should come back as a number, because every beating partial
+        // is an independent estimate of the same thing.
+        //
+        // This is the payoff for measuring unisons as they are rather than
+        // muting to one string: the spread costs nothing extra to obtain.
+        let (f0, b) = (220.63, 3.04e-4);
+        let spread = 4.0;
+        let a = StringSpec::new(f0, b).with_partials(8).with_amp(0.35);
+        let x = tone(vec![a.clone(), a.detuned(spread)], 2.5, Some(-70.0));
+
+        let m = measure_note(&x, SR, f0, MeasureConfig::default()).expect("no measurement");
+        let got = m
+            .unison_spread_cents
+            .expect("a beating unison reported no spread");
+        let detail = m
+            .used()
+            .map(|p| {
+                format!(
+                    "n{}@{:.0}Hz beat={}",
+                    p.n,
+                    p.hz,
+                    p.beat_hz.map_or("-".into(), |b| format!("{b:.2}"))
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert!(
+            (got - spread).abs() < 1.2,
+            "strings {spread} cents apart measured as {got:.2}  [{detail}]"
+        );
+        assert!(
+            m.has(Concern::BeatingUnison),
+            "beating went unreported  [{detail}]"
+        );
+
+        // And the note's pitch lands between the two strings rather than being
+        // thrown somewhere else entirely by the beating.
+        //
+        // Only between them, deliberately. Where within the pair it falls
+        // depends on which part of the beat cycle the window happened to catch,
+        // so demanding the midpoint would be asserting something neither the
+        // physics nor the ear actually fixes.
+        let below = cents(f0, m.f0);
+        assert!(
+            below > -0.5 && below < spread + 0.5,
+            "pitch {:.3} sits outside the two strings, which span {f0:.3} to {:.3}",
+            m.f0,
+            f0 * 2f64.powf(spread / 1200.0)
+        );
+    }
+
+    #[test]
+    fn a_single_string_is_not_accused_of_beating() {
+        // The other half of the claim. A lone string must not be reported as a
+        // unison, or the diagnostic is worthless.
+        let (f0, b) = (220.63, 3.04e-4);
+        let x = tone(
+            vec![StringSpec::new(f0, b).with_partials(10).with_amp(0.4)],
+            2.5,
+            Some(-70.0),
+        );
+        let m = measure_note(&x, SR, f0, MeasureConfig::default()).expect("no measurement");
+        assert!(
+            !m.has(Concern::BeatingUnison),
+            "a single string was reported as beating, spread {:?}",
+            m.unison_spread_cents
         );
     }
 
