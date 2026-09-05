@@ -1,0 +1,717 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Stiffstring</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ground:#101319; --panel:#171b23; --panel-hi:#1e242e; --line:#2b323e;
+  --ink:#e7ebf2; --dim:#8b95a4; --brass:#c9a15a; --brass-soft:#8a6f3d;
+  --good:#56b38a; --bad:#d9645a;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --cond:"IBM Plex Sans Condensed","IBM Plex Sans",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--ground);color:var(--ink);
+  font-family:var(--sans);font-size:15px;line-height:1.55;
+  -webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent;
+}
+.wrap{max-width:720px;margin:0 auto;padding:16px 16px 90px}
+header{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;padding-bottom:10px;border-bottom:1px solid var(--line);margin-bottom:14px}
+h1{font-family:var(--cond);font-weight:600;font-size:20px;margin:0;letter-spacing:.03em;color:var(--brass)}
+header .sub{color:var(--dim);font-size:12.5px;margin:0}
+
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:4px;margin-bottom:12px;overflow:hidden}
+.phead{display:flex;align-items:center;gap:10px;padding:9px 14px;background:var(--panel-hi);border-bottom:1px solid var(--line)}
+.pnum{font-family:var(--mono);font-size:11px;color:var(--brass-soft);border:1px solid var(--brass-soft);border-radius:2px;padding:1px 5px;flex:none}
+.ptitle{font-family:var(--cond);font-weight:600;text-transform:uppercase;letter-spacing:.09em;font-size:13px;margin:0;flex:1}
+.pill{font-family:var(--mono);font-size:11px;letter-spacing:.04em;padding:2px 8px;border-radius:2px;border:1px solid var(--line);color:var(--dim);white-space:nowrap;flex:none}
+.pill.good{color:var(--good);border-color:#2f5c48}
+.pill.bad{color:var(--bad);border-color:#6b3430}
+.pill.busy{color:var(--brass);border-color:var(--brass-soft)}
+.pbody{padding:14px}
+.pbody>*+*{margin-top:12px}
+p{margin:0}
+.note{color:var(--dim);font-size:13px}
+.err{color:var(--bad);font-size:13px}
+.hidden{display:none!important}
+
+button{font-family:var(--sans);font-size:14px;font-weight:500;background:var(--panel-hi);color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:10px 15px;cursor:pointer}
+button:hover:not(:disabled){border-color:var(--brass-soft);color:var(--brass)}
+button:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+button:disabled{opacity:.4;cursor:default}
+button.primary{background:var(--brass);color:#1a1409;border-color:var(--brass);font-weight:600}
+button.primary:hover:not(:disabled){background:#dcb164;color:#1a1409}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+
+label{font-family:var(--cond);text-transform:uppercase;letter-spacing:.09em;font-size:11px;color:var(--dim);display:block;margin-bottom:4px}
+input[type=text],input[type=number],select{
+  width:100%;background:#0a0d11;color:var(--ink);border:1px solid var(--line);
+  border-radius:3px;padding:9px 10px;font-family:var(--sans);font-size:15px;
+}
+input:focus,select:focus{outline:none;border-color:var(--brass-soft)}
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:520px){.fields{grid-template-columns:1fr}}
+
+/* The measuring face: everything here is read at arm's length. */
+.stage{text-align:center;padding:4px 0}
+.stage .lbl{font-family:var(--cond);text-transform:uppercase;letter-spacing:.09em;font-size:11px;color:var(--dim)}
+.stage .name{font-family:var(--mono);font-size:64px;font-weight:500;line-height:1.02;letter-spacing:-.02em}
+.stage .sub{font-family:var(--mono);font-size:13px;color:var(--dim)}
+.prompt{text-align:center;font-family:var(--cond);text-transform:uppercase;letter-spacing:.1em;font-size:13px;color:var(--brass);min-height:1.4em}
+.bar{height:12px;background:#0a0d11;border:1px solid var(--line);border-radius:2px;overflow:hidden}
+.bar>i{display:block;height:100%;background:var(--brass);width:0%}
+.bar>i.hot{background:var(--bad)}
+
+.strip{display:flex;flex-wrap:wrap;gap:4px}
+.strip>span{font-family:var(--mono);font-size:11px;padding:3px 6px;border-radius:2px;border:1px solid var(--line);color:var(--dim)}
+.strip>span.done{color:var(--good);border-color:#2f5c48}
+.strip>span.warn{color:var(--brass);border-color:var(--brass-soft)}
+.strip>span.failed{color:var(--bad);border-color:#6b3430}
+.strip>span.now{background:var(--brass);color:#1a1409;border-color:var(--brass);font-weight:600}
+
+dl.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:0}
+dl.kv dt{font-size:13px;color:var(--dim)}
+dl.kv dd{margin:0;font-family:var(--mono);font-size:13px;font-variant-numeric:tabular-nums}
+dd.good{color:var(--good)} dd.bad{color:var(--bad)} dd.warn{color:var(--brass)}
+
+table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12.5px;font-variant-numeric:tabular-nums}
+th,td{text-align:right;padding:4px 7px;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+th{font-family:var(--cond);text-transform:uppercase;letter-spacing:.08em;font-size:11px;color:var(--dim);font-weight:600}
+td.bad{color:var(--bad)} td.warn{color:var(--brass)} td.good{color:var(--good)}
+.scroll{overflow-x:auto}
+canvas{display:block;width:100%;background:#0a0d11;border:1px solid var(--line);border-radius:3px}
+.saved{display:flex;flex-direction:column;gap:6px}
+.saved button{text-align:left;font-family:var(--mono);font-size:12.5px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Stiffstring</h1>
+  <p class="sub">Measure a piano, get its tuning.</p>
+</header>
+
+<div class="panel">
+  <div class="phead">
+    <span class="pnum">1</span>
+    <h2 class="ptitle">This piano</h2>
+    <span class="pill" id="p1">describe it</span>
+  </div>
+  <div class="pbody">
+    <div class="fields">
+      <div>
+        <label for="pName">Make and model</label>
+        <input type="text" id="pName" placeholder="Kimball spinet" autocomplete="off">
+      </div>
+      <div>
+        <label for="pType">Type</label>
+        <select id="pType">
+          <option value="spinet">Spinet</option>
+          <option value="console">Console</option>
+          <option value="upright">Upright</option>
+          <option value="studio">Studio upright</option>
+          <option value="baby-grand">Baby grand</option>
+          <option value="grand">Grand</option>
+          <option value="unknown">Not sure</option>
+        </select>
+      </div>
+    </div>
+    <div>
+      <label for="pNotes">Condition notes</label>
+      <input type="text" id="pNotes" placeholder="rusty bass, tenor won't hold" autocomplete="off">
+    </div>
+    <div class="fields">
+      <div>
+        <label for="pSingle">Single strings up to key</label>
+        <input type="number" id="pSingle" value="8" min="0" max="30">
+      </div>
+      <div>
+        <label for="pDouble">Two strings up to key</label>
+        <input type="number" id="pDouble" value="16" min="0" max="40">
+      </div>
+    </div>
+    <p class="note">The string counts decide whether a beating note is a unison to tune or a false
+      beat that tuning cannot cure. Defaults are a guess &mdash; correct them and it stays with
+      this piano.</p>
+    <div class="row">
+      <button class="primary" id="btnStart">Start measuring</button>
+      <button id="btnNew" class="hidden">New piano</button>
+    </div>
+    <p class="err hidden" id="startErr"></p>
+    <div id="savedWrap" class="hidden">
+      <label>Saved pianos</label>
+      <div class="saved" id="savedList"></div>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="phead">
+    <span class="pnum">2</span>
+    <h2 class="ptitle">Measure</h2>
+    <span class="pill" id="p2">waiting</span>
+  </div>
+  <div class="pbody">
+    <div class="stage">
+      <span class="lbl">Play this note</span>
+      <div class="name" id="target">&mdash;</div>
+      <div class="sub" id="targetSub">&nbsp;</div>
+    </div>
+    <p class="prompt" id="prompt">Start the microphone first</p>
+    <div class="bar"><i id="level"></i></div>
+    <dl class="kv" id="lastResult"></dl>
+    <div class="row">
+      <button id="btnSkip" disabled>Skip</button>
+      <button id="btnRedo" disabled>Redo last</button>
+      <button id="btnFinish" disabled>Finish and solve</button>
+    </div>
+    <div class="strip" id="strip"></div>
+  </div>
+</div>
+
+<div class="panel hidden" id="curvePanel">
+  <div class="phead">
+    <span class="pnum">3</span>
+    <h2 class="ptitle">Tuning</h2>
+    <span class="pill" id="p3">not solved</span>
+  </div>
+  <div class="pbody">
+    <div class="fields">
+      <div>
+        <label for="a4">Reference pitch, A4</label>
+        <select id="a4"></select>
+      </div>
+      <div>
+        <label for="stretch">Stretch</label>
+        <select id="stretch">
+          <option value="0.85">Gentler</option>
+          <option value="1" selected>As measured</option>
+          <option value="1.15">Wider</option>
+        </select>
+      </div>
+    </div>
+    <dl class="kv" id="curveInfo"></dl>
+    <canvas id="chart" width="720" height="220"></canvas>
+    <p class="note">Cents from equal temperament, A0 on the left to C8 on the right. Dots are the
+      notes actually measured.</p>
+    <div class="row">
+      <button class="primary" id="btnSave">Save this piano</button>
+      <button id="btnExport">Export</button>
+      <span class="note" id="saveNote"></span>
+    </div>
+    <div class="scroll"><table id="targets"><thead><tr>
+      <th>Key</th><th>Note</th><th>Target Hz</th><th>Stretch</th><th>B</th>
+    </tr></thead><tbody></tbody></table></div>
+  </div>
+</div>
+
+</div>
+<script src="../wasm/stiffstring.js"></script>
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+const keyName = k => { const m = k + 20; return NAMES[m % 12] + (Math.floor(m / 12) - 1); };
+
+const CAPTURE_SECONDS = 3.2;
+const PREROLL_SECONDS = 0.15;
+const ONSET_RISE_DB = 14;
+const ONSET_FLOOR_DB = -62;
+const REARM_SECONDS = 0.9;
+const SETTLE_SECONDS = 1.5;
+const EXTRA_NOTES = 5;      // beyond the anchors, chosen by the engine
+const STORE_KEY = "stiffstring.pianos";
+
+const S = {
+  engine:null, ac:null, stream:null, node:null, settings:null,
+  sampleRate:0, running:false,
+  ring:null, ringLen:0, ringPos:0,
+  armed:false, armedAt:0, capturing:false, capturedAt:0, capturedNeeded:0, captureStart:0,
+  floorDb:-90, peakHold:0,
+  plan:[], index:0, results:new Map(), lastKey:null,
+  secondPass:false, curve:null, pianoId:null,
+};
+
+const setPill = (sel, text, cls) => {
+  const el = $(sel);
+  el.textContent = text;
+  el.className = "pill" + (cls ? " " + cls : "");
+};
+const dbfs = a => a > 0 ? 20 * Math.log10(a) : -Infinity;
+const cents = (from, to) => 1200 * Math.log2(to / from);
+const median = xs => { if (!xs.length) return NaN; const s = [...xs].sort((a,b)=>a-b); return s[s.length>>1]; };
+
+function kv(el, rows){
+  el.innerHTML = "";
+  for (const [k, v, cls] of rows){
+    const dt = document.createElement("dt"); dt.textContent = k;
+    const dd = document.createElement("dd"); dd.textContent = v;
+    if (cls) dd.className = cls;
+    el.append(dt, dd);
+  }
+}
+
+/* ---------------- capture ---------------- */
+const WORKLET = `
+class Tap extends AudioWorkletProcessor {
+  constructor() { super(); this.buf = new Float32Array(1024); this.n = 0; }
+  process(inputs) {
+    const ch = inputs[0] && inputs[0][0];
+    if (ch) {
+      for (let i = 0; i < ch.length; i++) {
+        this.buf[this.n++] = ch[i];
+        if (this.n === this.buf.length) { this.port.postMessage(this.buf.slice()); this.n = 0; }
+      }
+    }
+    return true;
+  }
+}
+registerProcessor('tap', Tap);
+`;
+
+async function start(){
+  $("#btnStart").disabled = true;
+  setPill("#p1", "starting", "busy");
+  $("#startErr").classList.add("hidden");
+
+  try {
+    if (!S.engine) S.engine = await Stiffstring.load("../wasm/stiffstring.wasm");
+  } catch(e){
+    return fail("Could not load the engine — " + (e.message || e));
+  }
+
+  try {
+    S.stream = await navigator.mediaDevices.getUserMedia({
+      audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:false, channelCount:1 },
+      video:false
+    });
+  } catch(e){
+    return fail("Microphone refused — " + e.name + ": " + e.message);
+  }
+
+  try { S.settings = S.stream.getAudioTracks()[0].getSettings(); } catch(e){ S.settings = null; }
+
+  const AC = window.AudioContext || window.webkitAudioContext;
+  S.ac = new AC();
+  if (S.ac.state === "suspended") { try { await S.ac.resume(); } catch(e){} }
+  S.sampleRate = S.ac.sampleRate;
+  if (!S.ac.audioWorklet) return fail("This browser cannot capture raw audio reliably.");
+
+  const url = URL.createObjectURL(new Blob([WORKLET], { type:"application/javascript" }));
+  await S.ac.audioWorklet.addModule(url);
+  URL.revokeObjectURL(url);
+
+  S.ringLen = Math.ceil(S.sampleRate * (CAPTURE_SECONDS + PREROLL_SECONDS + 1));
+  S.ring = new Float32Array(S.ringLen);
+  S.ringPos = 0;
+
+  const src = S.ac.createMediaStreamSource(S.stream);
+  S.node = new AudioWorkletNode(S.ac, "tap");
+  S.node.port.onmessage = e => onSamples(e.data);
+  src.connect(S.node);
+  const sink = S.ac.createGain();
+  sink.gain.value = 0;
+  S.node.connect(sink).connect(S.ac.destination);
+
+  S.running = true;
+  S.armed = true;
+  S.armedAt = performance.now();
+
+  // Anchors first; the engine asks for more once it has seen these.
+  S.plan = S.engine.anchorKeys().map(k => Math.round(k));
+  S.index = 0;
+  S.results.clear();
+  S.secondPass = false;
+
+  setPill("#p1", "measuring", "good");
+  setPill("#p2", "listening", "good");
+  $("#btnSkip").disabled = false;
+  $("#btnNew").classList.remove("hidden");
+  try { if ("wakeLock" in navigator) await navigator.wakeLock.request("screen"); } catch(e){}
+
+  renderStrip(); showTarget();
+  requestAnimationFrame(tick);
+}
+
+function fail(message){
+  setPill("#p1", "failed", "bad");
+  $("#btnStart").disabled = false;
+  const err = $("#startErr");
+  err.classList.remove("hidden");
+  err.textContent = message;
+}
+
+function onSamples(block){
+  for (let i = 0; i < block.length; i++){
+    S.ring[S.ringPos] = block[i];
+    S.ringPos = (S.ringPos + 1) % S.ringLen;
+  }
+  let sum = 0, peak = 0;
+  for (let i = 0; i < block.length; i++){
+    const v = block[i];
+    sum += v * v;
+    const a = v < 0 ? -v : v;
+    if (a > peak) peak = a;
+  }
+  const rms = dbfs(Math.sqrt(sum / block.length));
+  if (peak > S.peakHold) S.peakHold = peak;
+  if (Number.isFinite(rms)) S.floorDb = rms < S.floorDb ? rms : S.floorDb + (rms - S.floorDb) * 0.002;
+
+  if (S.capturing){
+    S.capturedNeeded -= block.length;
+    if (S.capturedNeeded <= 0){ S.capturing = false; finishCapture(); }
+    return;
+  }
+  if (!S.armed || S.index >= S.plan.length) return;
+  if (performance.now() - S.armedAt < SETTLE_SECONDS * 1000) return;
+  if (performance.now() - S.capturedAt < REARM_SECONDS * 1000) return;
+
+  if (rms > S.floorDb + ONSET_RISE_DB && rms > ONSET_FLOOR_DB){
+    S.capturing = true;
+    S.capturedNeeded = Math.ceil(S.sampleRate * CAPTURE_SECONDS);
+    S.captureStart = (S.ringPos - Math.ceil(S.sampleRate * PREROLL_SECONDS) - block.length + S.ringLen * 2) % S.ringLen;
+    $("#prompt").textContent = "Listening — let it ring";
+    setPill("#p2", "recording", "busy");
+  }
+}
+
+function grabCapture(){
+  const total = Math.ceil(S.sampleRate * (CAPTURE_SECONDS + PREROLL_SECONDS));
+  const out = new Float32Array(total);
+  for (let i = 0; i < total; i++) out[i] = S.ring[(S.captureStart + i) % S.ringLen];
+  return out;
+}
+
+/* Pitch hint improves as the piano reveals where it sits. */
+function hintFor(key){
+  const offsets = [...S.results.values()].filter(r => r.ok).map(r => r.offsetCents);
+  const shift = offsets.length >= 3 ? median(offsets) : 0;
+  return S.engine.keyNominalHz(key, 440) * Math.pow(2, shift / 1200);
+}
+
+function finishCapture(){
+  S.capturedAt = performance.now();
+  const key = S.plan[S.index];
+  const audio = grabCapture();
+  S.peakHold = 0;
+  setPill("#p2", "measuring", "busy");
+  $("#prompt").textContent = "Measuring";
+
+  // Yield first so the screen repaints before the engine takes the thread.
+  setTimeout(() => {
+    const m = S.engine.measureNote(audio, S.sampleRate, hintFor(key));
+    recordResult(key, m);
+    S.index++;
+    advance();
+  }, 0);
+}
+
+function recordResult(key, m){
+  S.lastKey = key;
+  if (!m){
+    S.results.set(key, { key, ok:false });
+    kv($("#lastResult"), [[keyName(key), "no measurement — play it again, firmly", "bad"]]);
+    return;
+  }
+  const nominal = S.engine.keyNominalHz(key, 440);
+  const r = {
+    key, ok:true, f0:m.f0, b:m.b, weight:m.weight,
+    offsetCents: cents(nominal, m.f0),
+    rmsCents: m.rmsCents, beat: m.beatSpreadCents,
+    concerns: m.concerns, partials: m.partials.length,
+  };
+  S.results.set(key, r);
+
+  const single = key <= Number($("#pSingle").value || 0);
+  const beatText = r.beat === null ? "none heard"
+    : r.beat.toFixed(2) + "¢ " + (single ? "false beat" : "unison");
+  kv($("#lastResult"), [
+    [keyName(key), r.f0.toFixed(2) + " Hz, " + r.offsetCents.toFixed(1) + "¢ from 440", "good"],
+    ["Inharmonicity", r.b.toExponential(2) + "  from " + r.partials + " partials"],
+    ["Beating", beatText, r.beat === null ? null : "warn"],
+    ["Fit", r.rmsCents.toFixed(2) + "¢" + (r.concerns.length ? "  — " + r.concerns.join(", ") : "")],
+  ]);
+}
+
+function usableSamples(){
+  return [...S.results.values()].filter(r => r.ok)
+    .map(r => ({ key:r.key, f0:r.f0, b:r.b, weight:r.weight }));
+}
+
+function advance(){
+  renderStrip();
+  $("#btnRedo").disabled = false;
+  $("#btnFinish").disabled = usableSamples().length < 4;
+
+  if (S.index < S.plan.length){ showTarget(); setPill("#p2", "listening", "good"); return; }
+
+  // Anchors done: let the engine ask for whatever would help most, then go back
+  // for anything it could not measure, this time lending it a stiffness.
+  const samples = usableSamples();
+  if (!S.secondPass && samples.length >= 4){
+    for (let i = 0; i < EXTRA_NOTES; i++){
+      const next = S.engine.suggestNextKey(usableSamples());
+      if (!next || S.results.has(next) || S.plan.includes(next)) break;
+      S.plan.push(next);
+    }
+    if (S.index < S.plan.length){ renderStrip(); showTarget(); setPill("#p2", "listening", "good"); return; }
+    S.secondPass = true;
+    const failed = [...S.results.values()].filter(r => !r.ok).map(r => r.key);
+    if (failed.length){
+      S.plan.push(...failed);
+      failed.forEach(k => S.results.delete(k));
+      renderStrip(); showTarget();
+      setPill("#p2", "retrying", "busy");
+      $("#prompt").textContent = "These need another try";
+      return;
+    }
+  }
+  finish();
+}
+
+function showTarget(){
+  if (S.index >= S.plan.length){
+    $("#target").textContent = "done";
+    $("#targetSub").textContent = usableSamples().length + " notes measured";
+    $("#prompt").textContent = "";
+    return;
+  }
+  const key = S.plan[S.index];
+  $("#target").textContent = keyName(key);
+  $("#targetSub").textContent = "key " + key + " · about " + hintFor(key).toFixed(1) + " Hz";
+  $("#prompt").textContent = S.running ? "Waiting for the strike" : "Start the microphone first";
+}
+
+function renderStrip(){
+  const strip = $("#strip");
+  strip.innerHTML = "";
+  S.plan.forEach((key, i) => {
+    const el = document.createElement("span");
+    el.textContent = keyName(key);
+    const r = S.results.get(key);
+    if (i === S.index) el.className = "now";
+    else if (r && r.ok) el.className = r.concerns.length ? "warn" : "done";
+    else if (r) el.className = "failed";
+    strip.appendChild(el);
+  });
+}
+
+function tick(){
+  if (!S.running) return;
+  requestAnimationFrame(tick);
+  const bar = $("#level");
+  bar.style.width = Math.min(100, S.peakHold * 100) + "%";
+  bar.classList.toggle("hot", S.peakHold >= 0.999);
+  S.peakHold *= 0.97;
+}
+
+/* ---------------- solving ---------------- */
+function finish(){
+  const samples = usableSamples();
+  if (samples.length < 4){
+    setPill("#p2", "not enough notes", "bad");
+    return;
+  }
+  setPill("#p2", samples.length + " measured", "good");
+  $("#curvePanel").classList.remove("hidden");
+
+  // Offer the piano's own pitch alongside standard, so a neglected instrument
+  // need not be dragged up in one visit.
+  const own = 440 * Math.pow(2, median(samples.map(s => cents(S.engine.keyNominalHz(s.key, 440), s.f0))) / 1200);
+  const sel = $("#a4");
+  const wanted = [
+    ["440", "440.0 Hz — standard"],
+    [own.toFixed(1), own.toFixed(1) + " Hz — as this piano sits"],
+    ["442", "442.0 Hz"],
+    ["438", "438.0 Hz"],
+  ];
+  sel.innerHTML = "";
+  for (const [value, label] of wanted){
+    const o = document.createElement("option");
+    o.value = value; o.textContent = label;
+    sel.appendChild(o);
+  }
+  sel.value = own.toFixed(1);
+  solve();
+  $("#curvePanel").scrollIntoView({ behavior:"smooth", block:"start" });
+}
+
+function solve(){
+  const samples = usableSamples();
+  const a4 = Number($("#a4").value) || 440;
+  const stretch = Number($("#stretch").value);
+  const curve = S.engine.solveCurve(samples, { a4Hz:a4, stretch });
+  if (!curve){ setPill("#p3", "could not solve", "bad"); return; }
+  S.curve = curve;
+  setPill("#p3", "solved", "good");
+
+  kv($("#curveInfo"), [
+    ["Notes measured", String(samples.length)],
+    ["Bass break", curve.breakKey ? keyName(curve.breakKey) + " (key " + curve.breakKey + ")" : "none found"],
+    ["Model spread", (Math.pow(10, curve.rmsLog10) * 100 - 100).toFixed(0) + "% in stiffness"],
+    ["A0", curve.cents[0].toFixed(1) + "¢   " + curve.hz[0].toFixed(2) + " Hz"],
+    ["A4", curve.cents[48].toFixed(2) + "¢   " + curve.hz[48].toFixed(2) + " Hz"],
+    ["C8", "+" + curve.cents[87].toFixed(1) + "¢   " + curve.hz[87].toFixed(1) + " Hz"],
+  ]);
+
+  const tb = $("#targets tbody");
+  tb.innerHTML = "";
+  for (let key = 1; key <= 88; key++){
+    const tr = document.createElement("tr");
+    tr.innerHTML = "<td>" + key + "</td><td>" + keyName(key) + "</td><td>" +
+      curve.hz[key-1].toFixed(2) + "</td><td>" + curve.cents[key-1].toFixed(2) + "¢</td><td>" +
+      curve.b[key-1].toExponential(2) + "</td>";
+    tb.appendChild(tr);
+  }
+  drawChart();
+}
+
+function drawChart(){
+  const c = $("#chart");
+  if (!S.curve || !c.clientWidth) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = c.clientWidth, h = Math.round(w * 220 / 720);
+  if (c.width !== Math.round(w*dpr)){ c.width = Math.round(w*dpr); c.height = Math.round(h*dpr); c.style.height = h + "px"; }
+  const g = c.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.fillStyle = "#0a0d11"; g.fillRect(0, 0, w, h);
+
+  const lo = Math.min(-2, Math.min(...S.curve.cents) - 2);
+  const hi = Math.max(2, Math.max(...S.curve.cents) + 2);
+  const x = k => ((k - 1) / 87) * (w - 34) + 26;
+  const y = v => h - 18 - ((v - lo) / (hi - lo)) * (h - 34);
+
+  g.strokeStyle = "#1b222c"; g.lineWidth = 1;
+  g.font = "10px ui-monospace, monospace"; g.fillStyle = "#8b95a4";
+  for (let v = Math.ceil(lo / 10) * 10; v <= hi; v += 10){
+    g.beginPath(); g.moveTo(24, y(v)); g.lineTo(w - 6, y(v)); g.stroke();
+    g.fillText(String(v), 2, y(v) + 3);
+  }
+  g.strokeStyle = "#2b323e";
+  g.beginPath(); g.moveTo(24, y(0)); g.lineTo(w - 6, y(0)); g.stroke();
+
+  g.strokeStyle = "#c9a15a"; g.lineWidth = 2; g.beginPath();
+  for (let k = 1; k <= 88; k++){
+    const px = x(k), py = y(S.curve.cents[k-1]);
+    if (k === 1) g.moveTo(px, py); else g.lineTo(px, py);
+  }
+  g.stroke();
+
+  g.fillStyle = "#56b38a";
+  for (const s of usableSamples()){
+    g.beginPath(); g.arc(x(s.key), y(S.curve.cents[s.key-1]), 3, 0, Math.PI * 2); g.fill();
+  }
+}
+
+/* ---------------- storage ---------------- */
+const loadStore = () => { try { return JSON.parse(localStorage.getItem(STORE_KEY)) || []; } catch(e){ return []; } };
+const saveStore = list => { try { localStorage.setItem(STORE_KEY, JSON.stringify(list)); return true; } catch(e){ return false; } };
+
+function pianoRecord(){
+  return {
+    id: S.pianoId || ("p" + Date.now()),
+    name: $("#pName").value || "(unnamed)",
+    type: $("#pType").value,
+    notes: $("#pNotes").value,
+    stringing: { single: Number($("#pSingle").value), double: Number($("#pDouble").value) },
+    a4: Number($("#a4").value) || 440,
+    stretch: Number($("#stretch").value),
+    samples: usableSamples(),
+    savedAt: new Date().toISOString(),
+  };
+}
+
+function savePiano(){
+  const rec = pianoRecord();
+  S.pianoId = rec.id;
+  const list = loadStore().filter(p => p.id !== rec.id);
+  list.unshift(rec);
+  const ok = saveStore(list);
+  $("#saveNote").textContent = ok
+    ? "saved " + new Date().toLocaleTimeString()
+    : "could not save — export instead";
+  renderSaved();
+}
+
+function renderSaved(){
+  const list = loadStore();
+  $("#savedWrap").classList.toggle("hidden", list.length === 0);
+  const box = $("#savedList");
+  box.innerHTML = "";
+  for (const p of list){
+    const b = document.createElement("button");
+    b.textContent = p.name + "  · " + p.samples.length + " notes · " + p.savedAt.slice(0, 10);
+    b.addEventListener("click", () => loadPiano(p));
+    box.appendChild(b);
+  }
+}
+
+function loadPiano(p){
+  $("#pName").value = p.name;
+  $("#pType").value = p.type;
+  $("#pNotes").value = p.notes || "";
+  $("#pSingle").value = p.stringing ? p.stringing.single : 8;
+  $("#pDouble").value = p.stringing ? p.stringing.double : 16;
+  S.pianoId = p.id;
+  S.results.clear();
+  for (const s of p.samples){
+    S.results.set(s.key, {
+      key:s.key, ok:true, f0:s.f0, b:s.b, weight:s.weight,
+      offsetCents: 0, rmsCents: 0, beat: null, concerns: [], partials: 0,
+    });
+  }
+  S.plan = p.samples.map(s => s.key);
+  S.index = S.plan.length;
+  if (S.engine){ renderStrip(); finish(); $("#a4").value = String(p.a4); $("#stretch").value = String(p.stretch); solve(); }
+  else setPill("#p1", "loaded — start to solve", "good");
+}
+
+function exportPiano(){
+  const rec = pianoRecord();
+  if (S.curve) rec.curve = { a4: rec.a4, cents: S.curve.cents, hz: S.curve.hz, b: S.curve.b };
+  const blob = new Blob([JSON.stringify(rec, null, 2)], { type:"application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = (rec.name.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "piano") + ".json";
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+}
+
+/* ---------------- wiring ---------------- */
+$("#btnStart").addEventListener("click", start);
+$("#btnSkip").addEventListener("click", () => { if (S.index < S.plan.length){ S.index++; advance(); } });
+$("#btnRedo").addEventListener("click", () => {
+  if (S.lastKey === null) return;
+  const i = S.plan.indexOf(S.lastKey);
+  if (i < 0) return;
+  S.results.delete(S.lastKey);
+  S.index = i;
+  S.lastKey = null;
+  $("#btnRedo").disabled = true;
+  kv($("#lastResult"), []);
+  renderStrip(); showTarget();
+});
+$("#btnFinish").addEventListener("click", () => { S.index = S.plan.length; finish(); });
+$("#btnSave").addEventListener("click", savePiano);
+$("#btnExport").addEventListener("click", exportPiano);
+$("#btnNew").addEventListener("click", () => location.reload());
+$("#a4").addEventListener("change", solve);
+$("#stretch").addEventListener("change", solve);
+window.addEventListener("resize", drawChart);
+
+renderSaved();
+renderStrip();
+showTarget();
+</script>
+</body>
+</html>

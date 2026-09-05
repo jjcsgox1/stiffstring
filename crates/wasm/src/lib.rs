@@ -29,13 +29,16 @@ use std::alloc::{alloc, dealloc, Layout};
 
 use stiffstring_core::curve::{solve, CurveConfig};
 use stiffstring_core::inharmonicity::{measure_note, Concern, MeasureConfig};
-use stiffstring_core::piano::{fit_model, key_nominal_hz, NoteSample, KEYS};
+use stiffstring_core::piano::{
+    anchor_keys, fit_model, key_nominal_hz, suggest_next_key, NoteSample, KEYS,
+};
 
 /// Interface version. Bumped whenever a layout below changes, so the loader can
 /// refuse to run against a module it does not understand.
 ///
 /// 2: added unison spread per note and beat rate per partial.
-pub const ABI_VERSION: u32 = 2;
+/// 3: stiffness per key added to the curve output; note-choosing exposed.
+pub const ABI_VERSION: u32 = 3;
 
 #[no_mangle]
 pub extern "C" fn ss_abi_version() -> u32 {
@@ -100,7 +103,7 @@ fn concern_bits(concerns: &[Concern]) -> f64 {
 }
 
 /// Number of `f64`s [`ss_measure_note`] writes before the per-partial block.
-const NOTE_HEADER: usize = 6;
+const NOTE_HEADER: usize = 7;
 /// Number of `f64`s per partial.
 const PARTIAL_STRIDE: usize = 7;
 
@@ -121,6 +124,7 @@ const PARTIAL_STRIDE: usize = 7;
 ///                   32 beating unison
 /// [4] partial count P
 /// [5] unison spread in cents, or 0 if the strings were not heard beating
+/// [6] how much this measurement should count toward a keyboard model, 0 to 1
 /// then P blocks of 7: partial number, Hz, amplitude, confidence,
 ///                     residual cents, used (1 or 0),
 ///                     beat rate in Hz or 0 if not beating
@@ -164,6 +168,9 @@ pub unsafe extern "C" fn ss_measure_note(
     // Zero stands for "not beating". A beat of exactly no hertz is not a thing a
     // string can do, so the value is free to carry the meaning.
     dst[5] = m.beat_spread_cents.unwrap_or(0.0);
+    // Computed here rather than in JavaScript so the rule for how much a
+    // troubled measurement counts lives in exactly one place.
+    dst[6] = NoteSample::from_measurement(1, &m).weight;
     for (i, p) in m.partials.iter().enumerate() {
         let base = NOTE_HEADER + i * PARTIAL_STRIDE;
         dst[base] = f64::from(p.n);
@@ -177,9 +184,68 @@ pub unsafe extern "C" fn ss_measure_note(
     needed
 }
 
-/// Number of `f64`s [`ss_solve_curve`] writes: two header values then two arrays
-/// of 88.
-pub const CURVE_OUT_LEN: usize = 2 + 2 * KEYS as usize;
+/// Number of `f64`s [`ss_solve_curve`] writes: two header values then three
+/// arrays of 88.
+pub const CURVE_OUT_LEN: usize = 2 + 3 * KEYS as usize;
+
+/// Read the notes worth measuring first into `out`, returning how many.
+///
+/// Returns 0 if `out` is too small. Ask for at least 32 and there will be room.
+///
+/// # Safety
+/// `out` must point to `out_len` writable `f64`s.
+#[no_mangle]
+pub unsafe extern "C" fn ss_anchor_keys(out: *mut f64, out_len: usize) -> usize {
+    if out.is_null() {
+        return 0;
+    }
+    let keys = anchor_keys();
+    if out_len < keys.len() {
+        return 0;
+    }
+    let dst = std::slice::from_raw_parts_mut(out, keys.len());
+    for (slot, key) in dst.iter_mut().zip(&keys) {
+        *slot = f64::from(*key);
+    }
+    keys.len()
+}
+
+/// The next note most worth measuring, given what has been measured already.
+///
+/// `samples` is the same layout [`ss_solve_curve`] takes: `count` groups of four
+/// `f64`s — key, fundamental, stiffness, weight.
+///
+/// Returns the key, or 0 when nothing further would meaningfully improve the
+/// model, which is the signal to stop asking the technician for notes.
+///
+/// # Safety
+/// `samples` must point to `count * 4` readable `f64`s.
+#[no_mangle]
+pub unsafe extern "C" fn ss_suggest_next_key(samples: *const f64, count: usize) -> u32 {
+    if samples.is_null() || count == 0 {
+        return 0;
+    }
+    let notes = read_samples(samples, count);
+    let Some(model) = fit_model(&notes) else {
+        return 0;
+    };
+    suggest_next_key(&notes, &model).map_or(0, u32::from)
+}
+
+/// Unpack the caller's four-per-note layout, dropping anything unusable.
+unsafe fn read_samples(samples: *const f64, count: usize) -> Vec<NoteSample> {
+    let raw = std::slice::from_raw_parts(samples, count * 4);
+    (0..count)
+        .map(|i| &raw[i * 4..i * 4 + 4])
+        .filter(|c| c[0] >= 1.0 && c[0] <= f64::from(KEYS) && c[2] > 0.0)
+        .map(|c| NoteSample {
+            key: c[0] as u8,
+            f0: c[1],
+            b: c[2],
+            weight: c[3],
+        })
+        .collect()
+}
 
 /// Fit inharmonicity across the keyboard from measured notes, then solve for
 /// tuning targets.
@@ -200,9 +266,13 @@ pub const CURVE_OUT_LEN: usize = 2 + 2 * KEYS as usize;
 /// ```text
 /// [0] detected break key, or 0 if the samples supported no split
 /// [1] model residual, log10 units
-/// [2 .. 90]  cents from equal temperament, keys 1 to 88
+/// [2 .. 90]   cents from equal temperament, keys 1 to 88
 /// [90 .. 178] target frequencies, keys 1 to 88
+/// [178 .. 266] inharmonicity coefficient, keys 1 to 88
 /// ```
+///
+/// The stiffness array is what lets a caller measure the top octave: those notes
+/// give too few partials to determine their own, and can borrow it from here.
 ///
 /// Returns the number of `f64`s written, or 0 on failure — most often too few
 /// usable samples to fit a model at all.
@@ -226,18 +296,7 @@ pub unsafe extern "C" fn ss_solve_curve(
     if samples.is_null() || out.is_null() || count == 0 || out_len < CURVE_OUT_LEN {
         return 0;
     }
-    let raw = std::slice::from_raw_parts(samples, count * 4);
-    let notes: Vec<NoteSample> = (0..count)
-        .map(|i| &raw[i * 4..i * 4 + 4])
-        .filter(|c| c[0] >= 1.0 && c[0] <= f64::from(KEYS) && c[2] > 0.0)
-        .map(|c| NoteSample {
-            key: c[0] as u8,
-            f0: c[1],
-            b: c[2],
-            weight: c[3],
-        })
-        .collect();
-
+    let notes = read_samples(samples, count);
     let Some(model) = fit_model(&notes) else {
         return 0;
     };
@@ -267,5 +326,6 @@ pub unsafe extern "C" fn ss_solve_curve(
     let n = KEYS as usize;
     dst[2..2 + n].copy_from_slice(&curve.cents);
     dst[2 + n..2 + 2 * n].copy_from_slice(&curve.hz);
+    dst[2 + 2 * n..2 + 3 * n].copy_from_slice(&model.all());
     CURVE_OUT_LEN
 }

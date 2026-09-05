@@ -13,12 +13,12 @@
 (function (global) {
   "use strict";
 
-  const EXPECTED_ABI = 2;
+  const EXPECTED_ABI = 3;
 
-  const NOTE_HEADER = 6;
+  const NOTE_HEADER = 7;
   const PARTIAL_STRIDE = 7;
   const KEYS = 88;
-  const CURVE_OUT_LEN = 2 + 2 * KEYS;
+  const CURVE_OUT_LEN = 2 + 3 * KEYS;
 
   const CONCERNS = [
     [1, "fundamental missing"],
@@ -69,6 +69,43 @@
     /** Equal-tempered frequency of a key, 1 = A0 and 88 = C8. */
     keyNominalHz(key, a4Hz) {
       return this.exports.ss_key_nominal_hz(key, a4Hz === undefined ? 440 : a4Hz);
+    }
+
+    /** The notes worth measuring first, spread across the compass. */
+    anchorKeys() {
+      const count = 48;
+      const bytes = count * 8;
+      const ptr = this._alloc(bytes);
+      try {
+        const written = this.exports.ss_anchor_keys(ptr, count);
+        return Array.from(this._f64().subarray(ptr / 8, ptr / 8 + written));
+      } finally {
+        this._free(ptr, bytes);
+      }
+    }
+
+    /**
+     * The next note most worth measuring, or null when more would not help.
+     *
+     * `notes` is the same shape solveCurve takes.
+     */
+    suggestNextKey(notes) {
+      const packed = new Float64Array(notes.length * 4);
+      notes.forEach((n, i) => {
+        packed[i * 4] = n.key;
+        packed[i * 4 + 1] = n.f0 || 0;
+        packed[i * 4 + 2] = n.b;
+        packed[i * 4 + 3] = n.weight === undefined ? 1 : n.weight;
+      });
+      const bytes = packed.byteLength;
+      if (!bytes) return null;
+      const ptr = this._alloc(bytes);
+      try {
+        this._f64().set(packed, ptr / 8);
+        return this.exports.ss_suggest_next_key(ptr, notes.length) || null;
+      } finally {
+        this._free(ptr, bytes);
+      }
     }
 
     /**
@@ -125,6 +162,8 @@
           b: out[base + 1],
           rmsCents: out[base + 2],
           beatSpreadCents: out[base + 5] || null,
+          // How much this measurement should count toward a keyboard model.
+          weight: out[base + 6],
           concerns: decodeConcerns(out[base + 3]),
           partials,
         };
@@ -195,6 +234,9 @@
           rmsLog10: out[base + 1],
           cents: Array.from(out.subarray(base + 2, base + 2 + KEYS)),
           hz: Array.from(out.subarray(base + 2 + KEYS, base + 2 + 2 * KEYS)),
+          // Stiffness per key. The top octave gives too few partials to
+          // determine its own and borrows from here.
+          b: Array.from(out.subarray(base + 2 + 2 * KEYS, base + 2 + 3 * KEYS)),
         };
       } finally {
         this._free(inPtr, inBytes);
