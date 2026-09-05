@@ -90,6 +90,37 @@ td.bad{color:var(--bad)} td.warn{color:var(--brass)} td.good{color:var(--good)}
 canvas{display:block;width:100%;background:#0a0d11;border:1px solid var(--line);border-radius:3px}
 .saved{display:flex;flex-direction:column;gap:6px}
 .saved button{text-align:left;font-family:var(--mono);font-size:12.5px}
+
+/* The tuning face. One number dominates; nothing else moves. */
+.meter{text-align:center;padding:2px 0 6px}
+.meter .now{font-family:var(--mono);font-size:34px;font-weight:500;line-height:1.1}
+.meter .aim{font-family:var(--mono);font-size:12.5px;color:var(--dim)}
+.meter .cents{
+  font-family:var(--mono);font-weight:500;font-size:74px;line-height:1.05;
+  font-variant-numeric:tabular-nums;letter-spacing:-.03em;color:var(--dim);
+}
+.meter .cents.near{color:var(--brass)}
+.meter .cents.on{color:var(--good)}
+.meter .cents.off{color:var(--bad)}
+.meter .way{font-family:var(--cond);text-transform:uppercase;letter-spacing:.14em;font-size:13px;color:var(--dim);min-height:1.4em}
+.needle{position:relative;height:34px;background:#0a0d11;border:1px solid var(--line);border-radius:3px;overflow:hidden}
+.needle .band{position:absolute;top:0;bottom:0;background:#16261f;border-left:1px solid #234034;border-right:1px solid #234034}
+.needle .mid{position:absolute;top:0;bottom:0;left:50%;width:1px;background:var(--line)}
+.needle .pin{position:absolute;top:3px;bottom:3px;width:3px;background:var(--brass);border-radius:1px;transform:translateX(-1px)}
+.needle .pin.on{background:var(--good)}
+.needle .pin.off{background:var(--bad)}
+.needle .pin.stale{opacity:.35}
+.ticks{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:3px}
+
+/* Eighty-eight keys have to fit a thumb and a phone at once. */
+.keys{display:flex;flex-wrap:wrap;gap:2px}
+.keys button{
+  padding:0;width:30px;height:26px;font-family:var(--mono);font-size:10px;
+  border-radius:2px;background:#0a0d11;color:var(--dim);border:1px solid var(--line);
+}
+.keys button.black{background:#05070a}
+.keys button.done{color:var(--good);border-color:#2f5c48}
+.keys button.now{background:var(--brass);color:#1a1409;border-color:var(--brass);font-weight:600}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
@@ -215,6 +246,56 @@ canvas{display:block;width:100%;background:#0a0d11;border:1px solid var(--line);
   </div>
 </div>
 
+<div class="panel hidden" id="tunePanel">
+  <div class="phead">
+    <span class="pnum">4</span>
+    <h2 class="ptitle">Tune</h2>
+    <span class="pill" id="p4">not started</span>
+  </div>
+  <div class="pbody">
+    <div class="meter">
+      <div class="now" id="tuneNote">&mdash;</div>
+      <div class="aim" id="tuneAim">&nbsp;</div>
+      <div class="cents" id="tuneCents">&mdash;</div>
+      <div class="way" id="tuneWay">Play the note</div>
+    </div>
+    <div>
+      <div class="needle">
+        <i class="band" id="needleBand"></i>
+        <i class="mid"></i>
+        <i class="pin hidden" id="needlePin"></i>
+      </div>
+      <div class="ticks"><span>&minus;20&cent;</span><span>flat &nbsp;|&nbsp; sharp</span><span>+20&cent;</span></div>
+    </div>
+    <p class="note" id="tuneDetail">&nbsp;</p>
+    <div class="row">
+      <button class="primary" id="btnTune">Start tuning</button>
+      <button id="btnDone" disabled>Mark done, next</button>
+      <button id="btnBack" disabled>Previous</button>
+    </div>
+    <div class="fields">
+      <div>
+        <label for="tol">Close enough</label>
+        <select id="tol">
+          <option value="0.5">Within 0.5&cent;</option>
+          <option value="1" selected>Within 1&cent;</option>
+          <option value="2">Within 2&cent;</option>
+        </select>
+      </div>
+      <div>
+        <label for="advance">When a note settles</label>
+        <select id="advance">
+          <option value="1" selected>Move on by itself</option>
+          <option value="0">Wait for me</option>
+        </select>
+      </div>
+    </div>
+    <p class="note">Both hands stay at the piano: strike, set the pin, and it moves on when the
+      note holds inside tolerance. Tap any key below to jump to it.</p>
+    <div class="keys" id="keys"></div>
+  </div>
+</div>
+
 </div>
 <script src="../wasm/stiffstring.js"></script>
 <script>
@@ -232,6 +313,16 @@ const SETTLE_SECONDS = 1.5;
 const EXTRA_NOTES = 5;      // beyond the anchors, chosen by the engine
 const STORE_KEY = "stiffstring.pianos";
 
+/* The meter. Half a second is what the engine was graded on: long enough for
+   the phase fit to be precise, short enough to follow the string. */
+const METER_SECONDS = 0.5;
+const METER_MIN_MS = 70;
+const METER_HISTORY = 8;    // readings the display holds a median over
+const METER_LOST_MS = 700;  // silence this long and the lock is let go
+const METER_STALE_MS = 350; // no fresh reading: dim the needle, do not blank it
+const SETTLE_MS = 1200;     // how long a note must hold before it counts as done
+const MIDDLE_KEY = 40;      // C4 — tuning works outward from here (D22)
+
 const S = {
   engine:null, ac:null, stream:null, node:null, settings:null,
   sampleRate:0, running:false,
@@ -240,6 +331,8 @@ const S = {
   floorDb:-90, peakHold:0,
   plan:[], index:0, results:new Map(), lastKey:null,
   secondPass:false, curve:null, pianoId:null,
+  tuning:false, tuneKey:MIDDLE_KEY, order:[], tuned:new Set(),
+  lock:null, readings:[], lastReadingAt:0, insideSince:0, meterTimer:0,
 };
 
 const setPill = (sel, text, cls) => {
@@ -366,6 +459,10 @@ function onSamples(block){
   const rms = dbfs(Math.sqrt(sum / block.length));
   if (peak > S.peakHold) S.peakHold = peak;
   if (Number.isFinite(rms)) S.floorDb = rms < S.floorDb ? rms : S.floorDb + (rms - S.floorDb) * 0.002;
+
+  // While tuning, the meter pulls what it needs out of the ring on its own
+  // clock. Onset capture would only fight it.
+  if (S.tuning) return;
 
   if (S.capturing){
     S.capturedNeeded -= block.length;
@@ -574,6 +671,14 @@ function solve(){
     tb.appendChild(tr);
   }
   drawChart();
+
+  $("#tunePanel").classList.remove("hidden");
+  if (!S.tuning){
+    S.order = tuningOrder();
+    selectKey(S.tuneKey);
+  }
+  $("#btnTune").disabled = !S.running;
+  if (!S.running) setPill("#p4", "needs the microphone", null);
 }
 
 function drawChart(){
@@ -613,6 +718,200 @@ function drawChart(){
   }
 }
 
+/* ---------------- tuning ---------------- */
+
+/* The most recent stretch of audio, straight out of the ring. */
+function recentAudio(seconds){
+  const n = Math.min(S.ringLen, Math.ceil(S.sampleRate * seconds));
+  const out = new Float32Array(n);
+  const start = (S.ringPos - n + S.ringLen * 2) % S.ringLen;
+  for (let i = 0; i < n; i++) out[i] = S.ring[(start + i) % S.ringLen];
+  return out;
+}
+
+/* Middle outward (D22): the tension change is spread across the plate rather
+   than walked from one end of it to the other. */
+function tuningOrder(){
+  const order = [MIDDLE_KEY];
+  for (let d = 1; d < 88; d++){
+    if (MIDDLE_KEY + d <= 88) order.push(MIDDLE_KEY + d);
+    if (MIDDLE_KEY - d >= 1) order.push(MIDDLE_KEY - d);
+  }
+  return order;
+}
+
+function startTuning(){
+  if (!S.curve || !S.running) return;
+  S.tuning = true;
+  S.order = tuningOrder();
+  // Neither of these may move once a note has been tuned to them.
+  $("#a4").disabled = true;
+  $("#stretch").disabled = true;
+  $("#btnTune").textContent = "Stop tuning";
+  $("#btnDone").disabled = false;
+  $("#btnBack").disabled = false;
+  setPill("#p4", "tuning", "good");
+  setPill("#p2", "paused", null);
+  selectKey(S.tuned.size ? nextUntuned(MIDDLE_KEY) : MIDDLE_KEY);
+  meterTick();
+}
+
+function stopTuning(){
+  S.tuning = false;
+  clearTimeout(S.meterTimer);
+  S.lock = null;
+  S.readings = [];
+  $("#btnTune").textContent = "Start tuning";
+  $("#btnDone").disabled = true;
+  $("#btnBack").disabled = true;
+  // The reference and the stretch stay locked once anything has been tuned to
+  // them: a target a note has already been set to must never move.
+  $("#a4").disabled = S.tuned.size > 0;
+  $("#stretch").disabled = S.tuned.size > 0;
+  setPill("#p4", S.tuned.size + " tuned", S.tuned.size ? "good" : null);
+  $("#tuneWay").textContent = "Stopped";
+}
+
+function selectKey(key){
+  S.tuneKey = key;
+  S.lock = null;
+  S.readings = [];
+  S.insideSince = 0;
+  S.lastReadingAt = 0;
+  $("#tuneNote").textContent = keyName(key);
+  $("#tuneAim").textContent = S.curve
+    ? S.curve.hz[key-1].toFixed(2) + " Hz   " + S.curve.cents[key-1].toFixed(1) + "¢ from equal"
+    : "";
+  $("#tuneCents").textContent = "—";
+  $("#tuneCents").className = "cents";
+  $("#needlePin").classList.add("hidden");
+  renderKeys();
+}
+
+function nextUntuned(from){
+  const i = S.order.indexOf(from);
+  for (let step = 1; step <= S.order.length; step++){
+    const k = S.order[(i + step) % S.order.length];
+    if (!S.tuned.has(k)) return k;
+  }
+  return from;
+}
+
+function markDone(){
+  S.tuned.add(S.tuneKey);
+  setPill("#p4", S.tuned.size + " tuned", "good");
+  const next = nextUntuned(S.tuneKey);
+  selectKey(next);
+}
+
+function meterTick(){
+  if (!S.tuning) return;
+  const began = performance.now();
+  const key = S.tuneKey;
+  const target = S.curve.hz[key-1];
+  const b = S.curve.b[key-1];
+  const audio = recentAudio(METER_SECONDS);
+
+  if (!S.lock){
+    const l = S.engine.lockNote(audio, S.sampleRate, target, b);
+    if (l){ S.lock = l; S.readings = []; S.lastReadingAt = began; }
+  } else {
+    const r = S.engine.track(audio, S.sampleRate, target, b, S.lock.partial, S.lock.hz);
+    if (r){
+      // Feeding the last frequency back is what keeps successive updates asking
+      // about the same component instead of re-acquiring and jittering.
+      S.lock.hz = r.hz;
+      S.readings.push(r);
+      if (S.readings.length > METER_HISTORY) S.readings.shift();
+      S.lastReadingAt = began;
+    } else if (began - S.lastReadingAt > METER_LOST_MS){
+      S.lock = null;
+      S.readings = [];
+    }
+  }
+
+  paintMeter(began);
+
+  // The interval follows what the work actually costs, so a slower phone gets a
+  // slower meter rather than a stalled one.
+  const cost = performance.now() - began;
+  S.meterTimer = setTimeout(meterTick, Math.max(METER_MIN_MS, cost * 2.5));
+}
+
+function paintMeter(now){
+  const tol = Number($("#tol").value);
+  const s = S.readings.length ? S.engine.settle(S.readings) : null;
+  const stale = now - S.lastReadingAt > METER_STALE_MS;
+  const el = $("#tuneCents");
+  const pin = $("#needlePin");
+
+  // The tolerance band, drawn to the same scale as the needle.
+  const place = c => 50 + Math.max(-20, Math.min(20, c)) / 20 * 50;
+  const band = $("#needleBand");
+  band.style.left = place(-tol) + "%";
+  band.style.width = (place(tol) - place(-tol)) + "%";
+
+  if (!s){
+    el.textContent = "—";
+    el.className = "cents";
+    pin.classList.add("hidden");
+    $("#tuneWay").textContent = S.lock ? "Listening" : "Play the note";
+    $("#tuneDetail").innerHTML = "&nbsp;";
+    S.insideSince = 0;
+    return;
+  }
+
+  const c = s.cents;
+  const inside = Math.abs(c) <= tol;
+  el.textContent = (c >= 0 ? "+" : "−") + Math.abs(c).toFixed(1);
+  el.className = "cents " + (inside ? "on" : Math.abs(c) <= tol * 3 ? "near" : "off");
+  pin.classList.remove("hidden");
+  pin.style.left = place(c) + "%";
+  pin.className = "pin" + (inside ? " on" : Math.abs(c) <= tol * 3 ? "" : " off")
+    + (stale ? " stale" : "");
+  $("#tuneWay").textContent = inside ? "Holding" : c < 0 ? "Flat — raise it" : "Sharp — lower it";
+
+  // What the reading rests on, so a number that cannot be trusted says so.
+  const bits = ["partial " + S.lock.partial];
+  const beat = S.readings[S.readings.length-1].beatHz;
+  if (beat){
+    const single = S.tuneKey <= Number($("#pSingle").value || 0);
+    bits.push(beat.toFixed(1) + " beats/sec — " + (single ? "false beat, tuning cannot cure it" : "unison not set"));
+  }
+  if (s.spread > tol * 2) bits.push("reading swinging ±" + (s.spread/2).toFixed(1) + "¢");
+  $("#tuneDetail").textContent = bits.join(" · ");
+
+  // D23: a note completes itself once it has held inside tolerance, so both
+  // hands can stay where they are. A swinging reading is not held.
+  if (inside && !stale && s.spread <= tol * 3){
+    if (!S.insideSince) S.insideSince = now;
+    else if (now - S.insideSince >= SETTLE_MS && $("#advance").value === "1") markDone();
+  } else {
+    S.insideSince = 0;
+  }
+}
+
+function renderKeys(){
+  const box = $("#keys");
+  if (box.childElementCount !== 88){
+    box.innerHTML = "";
+    for (let k = 1; k <= 88; k++){
+      const b = document.createElement("button");
+      const name = keyName(k);
+      b.textContent = name;
+      b.dataset.key = String(k);
+      if (name.includes("#")) b.classList.add("black");
+      b.addEventListener("click", () => selectKey(k));
+      box.appendChild(b);
+    }
+  }
+  for (const b of box.children){
+    const k = Number(b.dataset.key);
+    b.classList.toggle("done", S.tuned.has(k));
+    b.classList.toggle("now", k === S.tuneKey);
+  }
+}
+
 /* ---------------- storage ---------------- */
 const loadStore = () => { try { return JSON.parse(localStorage.getItem(STORE_KEY)) || []; } catch(e){ return []; } };
 const saveStore = list => { try { localStorage.setItem(STORE_KEY, JSON.stringify(list)); return true; } catch(e){ return false; } };
@@ -627,6 +926,7 @@ function pianoRecord(){
     a4: Number($("#a4").value) || 440,
     stretch: Number($("#stretch").value),
     samples: usableSamples(),
+    tuned: [...S.tuned],
     savedAt: new Date().toISOString(),
   };
 }
@@ -670,6 +970,7 @@ function loadPiano(p){
       offsetCents: 0, rmsCents: 0, beat: null, concerns: [], partials: 0,
     });
   }
+  S.tuned = new Set(p.tuned || []);
   S.plan = p.samples.map(s => s.key);
   S.index = S.plan.length;
   if (S.engine){ renderStrip(); finish(); $("#a4").value = String(p.a4); $("#stretch").value = String(p.stretch); solve(); }
@@ -707,6 +1008,13 @@ $("#btnExport").addEventListener("click", exportPiano);
 $("#btnNew").addEventListener("click", () => location.reload());
 $("#a4").addEventListener("change", solve);
 $("#stretch").addEventListener("change", solve);
+$("#btnTune").addEventListener("click", () => (S.tuning ? stopTuning() : startTuning()));
+$("#btnDone").addEventListener("click", markDone);
+$("#btnBack").addEventListener("click", () => {
+  const i = S.order.indexOf(S.tuneKey);
+  if (i > 0) selectKey(S.order[i - 1]);
+});
+$("#tol").addEventListener("change", () => { S.insideSince = 0; });
 window.addEventListener("resize", drawChart);
 
 renderSaved();

@@ -13,7 +13,7 @@
 (function (global) {
   "use strict";
 
-  const EXPECTED_ABI = 3;
+  const EXPECTED_ABI = 4;
 
   const NOTE_HEADER = 7;
   const PARTIAL_STRIDE = 7;
@@ -167,6 +167,113 @@
           concerns: decodeConcerns(out[base + 3]),
           partials,
         };
+      } finally {
+        this._free(inPtr, inBytes);
+        this._free(outPtr, outBytes);
+      }
+    }
+
+    /**
+     * Decide which partial of a note to follow, and take a first reading.
+     *
+     * Call this when a note is struck, then `track` repeatedly with the partial
+     * it chose. `targetHz` and `b` come from `solveCurve`.
+     *
+     * Returns null when there is nothing to lock onto — not sounding, far from
+     * its target, or a different note. That is an answer, not an error.
+     */
+    lockNote(samples, sampleRate, targetHz, b) {
+      const inBytes = samples.length * 4;
+      const outBytes = 6 * 8;
+      const inPtr = this._alloc(inBytes);
+      let outPtr = 0;
+      try {
+        outPtr = this._alloc(outBytes);
+        this._f32().set(samples, inPtr / 4);
+        const written = this.exports.ss_lock_note(
+          inPtr, samples.length, sampleRate, targetHz, b, outPtr, 6
+        );
+        if (written === 0) return null;
+        const out = this._f64();
+        const base = outPtr / 8;
+        return {
+          partial: out[base],
+          hz: out[base + 1],
+          targetHz: out[base + 2],
+          cents: out[base + 3],
+          amplitude: out[base + 4],
+          confidence: out[base + 5],
+        };
+      } finally {
+        this._free(inPtr, inBytes);
+        this._free(outPtr, outBytes);
+      }
+    }
+
+    /**
+     * Read a partial already locked on to.
+     *
+     * `previousHz` is the frequency last reported for it, or 0. Passing it back
+     * is what keeps the reading steady between updates rather than re-acquiring
+     * each time.
+     *
+     * Returns null when the partial has fallen into the noise. Hold the last
+     * reading briefly rather than blanking: a note fading is not a note moving.
+     */
+    track(samples, sampleRate, targetHz, b, partial, previousHz) {
+      const inBytes = samples.length * 4;
+      const outBytes = 5 * 8;
+      const inPtr = this._alloc(inBytes);
+      let outPtr = 0;
+      try {
+        outPtr = this._alloc(outBytes);
+        this._f32().set(samples, inPtr / 4);
+        const written = this.exports.ss_track(
+          inPtr, samples.length, sampleRate, targetHz, b,
+          partial, previousHz || 0, outPtr, 5
+        );
+        if (written === 0) return null;
+        const out = this._f64();
+        const base = outPtr / 8;
+        return {
+          hz: out[base],
+          cents: out[base + 1],
+          amplitude: out[base + 2],
+          confidence: out[base + 3],
+          beatHz: out[base + 4] || null,
+        };
+      } finally {
+        this._free(inPtr, inBytes);
+        this._free(outPtr, outBytes);
+      }
+    }
+
+    /**
+     * Turn a run of readings from `track` into the one number to display.
+     *
+     * Takes the readings themselves; only their cents and confidence are used.
+     * The rule lives in the engine rather than here because deciding what a run
+     * of readings means is a judgement about audio.
+     */
+    settle(readings) {
+      if (!readings.length) return null;
+      const packed = new Float64Array(readings.length * 2);
+      readings.forEach((r, i) => {
+        packed[i * 2] = r.cents;
+        packed[i * 2 + 1] = r.confidence;
+      });
+      const inBytes = packed.byteLength;
+      const outBytes = 3 * 8;
+      const inPtr = this._alloc(inBytes);
+      let outPtr = 0;
+      try {
+        outPtr = this._alloc(outBytes);
+        this._f64().set(packed, inPtr / 8);
+        const written = this.exports.ss_settle(inPtr, readings.length, outPtr, 3);
+        if (written === 0) return null;
+        const out = this._f64();
+        const base = outPtr / 8;
+        return { cents: out[base], spread: out[base + 1], used: out[base + 2] };
       } finally {
         this._free(inPtr, inBytes);
         this._free(outPtr, outBytes);

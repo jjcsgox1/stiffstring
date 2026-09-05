@@ -8,11 +8,14 @@
 //! - [`fft`] locates partials.
 //! - [`estimate`] measures them, to a precision the FFT cannot reach, by
 //!   watching phase rather than magnitude.
+//! - [`meter`] answers the far smaller question the technician asks at the pin:
+//!   how far is this note from a target we already know.
 
 pub mod curve;
 pub mod estimate;
 pub mod fft;
 pub mod inharmonicity;
+pub mod meter;
 pub mod piano;
 pub mod synth;
 pub mod wav;

@@ -29,6 +29,7 @@ use std::alloc::{alloc, dealloc, Layout};
 
 use stiffstring_core::curve::{solve, CurveConfig};
 use stiffstring_core::inharmonicity::{measure_note, Concern, MeasureConfig};
+use stiffstring_core::meter::{lock_note, settle, track, Reading};
 use stiffstring_core::piano::{
     anchor_keys, fit_model, key_nominal_hz, suggest_next_key, NoteSample, KEYS,
 };
@@ -38,7 +39,8 @@ use stiffstring_core::piano::{
 ///
 /// 2: added unison spread per note and beat rate per partial.
 /// 3: stiffness per key added to the curve output; note-choosing exposed.
-pub const ABI_VERSION: u32 = 3;
+/// 4: the live meter — locking, tracking, and what to put on the display.
+pub const ABI_VERSION: u32 = 4;
 
 #[no_mangle]
 pub extern "C" fn ss_abi_version() -> u32 {
@@ -182,6 +184,159 @@ pub unsafe extern "C" fn ss_measure_note(
         dst[base + 6] = p.beat_hz.unwrap_or(0.0);
     }
     needed
+}
+
+/// Decide which partial of a note to follow, and take a first reading.
+///
+/// Called once when a note is struck, and again whenever the meter loses it.
+/// `target_f0` is what the note is being tuned to and `b` its stiffness, both
+/// from [`ss_solve_curve`]'s output.
+///
+/// Writes to `out`:
+///
+/// ```text
+/// [0] partial number to follow
+/// [1] where that partial actually is, Hz
+/// [2] where it would be if the note were on target, Hz
+/// [3] how far the note is from its target, cents, sharp positive
+/// [4] amplitude
+/// [5] confidence, 0 to 1
+/// ```
+///
+/// Returns 6, or 0 when there is nothing to lock onto: the note is not
+/// sounding, it is more than a semitone and a half from its target, or what is
+/// sounding is a different note. Zero is an ordinary answer, not an error.
+///
+/// # Safety
+/// `samples` must point to `len` readable `f32`s and `out` to `out_len`
+/// writable `f64`s.
+#[no_mangle]
+pub unsafe extern "C" fn ss_lock_note(
+    samples: *const f32,
+    len: usize,
+    sample_rate: f64,
+    target_f0: f64,
+    b: f64,
+    out: *mut f64,
+    out_len: usize,
+) -> usize {
+    if samples.is_null() || out.is_null() || len == 0 || out_len < 6 || sample_rate <= 0.0 {
+        return 0;
+    }
+    let audio = std::slice::from_raw_parts(samples, len);
+    let Some(l) = lock_note(audio, sample_rate, target_f0, b) else {
+        return 0;
+    };
+    let dst = std::slice::from_raw_parts_mut(out, 6);
+    dst[0] = f64::from(l.partial);
+    dst[1] = l.hz;
+    dst[2] = l.target_hz;
+    dst[3] = l.cents;
+    dst[4] = l.amplitude;
+    dst[5] = l.confidence;
+    6
+}
+
+/// Read a partial already locked on to.
+///
+/// `previous_hz` is the frequency last reported for it, or zero if there is
+/// none; handing it back is what keeps the reading steady between updates.
+///
+/// Writes to `out`:
+///
+/// ```text
+/// [0] where the partial is now, Hz
+/// [1] how far the note is from its target, cents, sharp positive
+/// [2] amplitude
+/// [3] confidence, 0 to 1
+/// [4] beat rate in Hz, or 0 if the strings are not heard beating
+/// ```
+///
+/// Returns 5, or 0 when the partial has fallen into the noise. The caller
+/// should hold the last reading briefly rather than blank the display: a note
+/// fading is not a note moving.
+///
+/// # Safety
+/// `samples` must point to `len` readable `f32`s and `out` to `out_len`
+/// writable `f64`s.
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn ss_track(
+    samples: *const f32,
+    len: usize,
+    sample_rate: f64,
+    target_f0: f64,
+    b: f64,
+    partial: u32,
+    previous_hz: f64,
+    out: *mut f64,
+    out_len: usize,
+) -> usize {
+    if samples.is_null() || out.is_null() || len == 0 || out_len < 5 || sample_rate <= 0.0 {
+        return 0;
+    }
+    let audio = std::slice::from_raw_parts(samples, len);
+    let Some(r) = track(audio, sample_rate, target_f0, b, partial, previous_hz) else {
+        return 0;
+    };
+    let dst = std::slice::from_raw_parts_mut(out, 5);
+    dst[0] = r.hz;
+    dst[1] = r.cents;
+    dst[2] = r.amplitude;
+    dst[3] = r.confidence;
+    // Zero stands for "not beating", as everywhere else in this interface.
+    dst[4] = r.beat_hz.unwrap_or(0.0);
+    5
+}
+
+/// Turn a short run of readings into the one number to show.
+///
+/// `readings` is `count` pairs of `f64`: the cents and the confidence of each,
+/// which is all the rule needs. Newest last, though the rule does not care.
+///
+/// Writes to `out`:
+///
+/// ```text
+/// [0] the number to show, cents
+/// [1] how far the readings behind it disagree, cents
+/// [2] how many readings it rests on
+/// ```
+///
+/// Lives here rather than in the page because deciding what a run of readings
+/// means is a judgement about audio, and it should not be restated in
+/// JavaScript.
+///
+/// # Safety
+/// `readings` must point to `count * 2` readable `f64`s and `out` to `out_len`
+/// writable `f64`s.
+#[no_mangle]
+pub unsafe extern "C" fn ss_settle(
+    readings: *const f64,
+    count: usize,
+    out: *mut f64,
+    out_len: usize,
+) -> usize {
+    if readings.is_null() || out.is_null() || count == 0 || out_len < 3 {
+        return 0;
+    }
+    let raw = std::slice::from_raw_parts(readings, count * 2);
+    let rs: Vec<Reading> = (0..count)
+        .map(|i| Reading {
+            hz: 0.0,
+            cents: raw[i * 2],
+            amplitude: 0.0,
+            confidence: raw[i * 2 + 1],
+            beat_hz: None,
+        })
+        .collect();
+    let Some(s) = settle(&rs) else {
+        return 0;
+    };
+    let dst = std::slice::from_raw_parts_mut(out, 3);
+    dst[0] = s.cents;
+    dst[1] = s.spread;
+    dst[2] = s.used as f64;
+    3
 }
 
 /// Number of `f64`s [`ss_solve_curve`] writes: two header values then three
