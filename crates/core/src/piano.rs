@@ -210,8 +210,19 @@ const B_MIN: f64 = 1e-6;
 const B_MAX: f64 = 3e-2;
 
 /// How far past the sampled range the trend may be followed before it is held
-/// flat. Beyond about an octave, a straight line in log B stops being credible.
-const MAX_EXTRAPOLATION_KEYS: f64 = 12.0;
+/// flat.
+///
+/// A backstop against a fitted slope running away, not a modelling choice. It
+/// was once an octave, which turned out to be actively harmful: the treble is
+/// where notes fail to measure, so the clamp engaged at whatever note the
+/// sampling happened to reach, and two recordings of one piano that stopped at
+/// different notes produced differently shaped models. A model must not change
+/// shape because of an accident of which notes were measurable.
+///
+/// Two octaves keeps the backstop for genuinely wild fits while leaving the
+/// fitted trend in charge over any real keyboard, with [`B_MAX`] bounding the
+/// result regardless.
+const MAX_EXTRAPOLATION_KEYS: f64 = 24.0;
 
 /// Smallest departure from the trend that can get a reading discarded, in log10
 /// units. 0.18 is about fifty percent in B — far beyond the few percent that

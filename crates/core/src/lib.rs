@@ -15,3 +15,4 @@ pub mod fft;
 pub mod inharmonicity;
 pub mod piano;
 pub mod synth;
+pub mod wav;

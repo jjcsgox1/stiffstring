@@ -146,6 +146,13 @@ pub struct MeasureConfig {
     /// Six is about 16 dB — comfortably clear of the noise without discarding
     /// the faint upper partials the bass depends on.
     pub noise_margin: f64,
+    /// Stiffness already known for this note, from the notes around it.
+    ///
+    /// Supply it and a note offering only two partials can still be measured,
+    /// with the fundamental fitted and the stiffness taken as given. Without it
+    /// such a note is declined, which in the treble means most of the top
+    /// octave. See [`fit_f0_given_b`].
+    pub b_hint: Option<f64>,
     pub refine: RefineConfig,
 }
 
@@ -158,6 +165,7 @@ impl Default for MeasureConfig {
             min_partials: 3,
             outlier_cents: 12.0,
             noise_margin: 6.0,
+            b_hint: None,
             refine: RefineConfig::default(),
         }
     }
@@ -317,6 +325,101 @@ pub fn fit_inharmonicity(obs: &[Observation]) -> Option<Fit> {
         rms_cents: if wsum > 0.0 { (sse / wsum).sqrt() } else { 0.0 },
         residuals_cents,
     })
+}
+
+/// Fit the fundamental alone, taking stiffness as already known.
+///
+/// The treble case, and the reason the top of the piano was unmeasurable. A note
+/// up there offers two or three partials before they vanish into the noise,
+/// which is too few to determine a fundamental *and* a stiffness — the fit needs
+/// three points to place a line through them.
+///
+/// But stiffness varies smoothly across the keyboard, so the notes below have
+/// already said what it is up here. Measuring what can be measured and borrowing
+/// the rest is far better than declining to answer, because declining leaves the
+/// top octave to be extrapolated from wherever the measurements happened to
+/// stop — which is exactly what made two recordings of one piano disagree by
+/// nine cents at C8 while agreeing to a tenth of a cent everywhere else.
+///
+/// The borrowed value has to be good, and increasingly so with pitch. Stiffness
+/// stretches partial `n` by roughly `B n^2`, so where `B` is small an error in it
+/// barely moves the fundamental — twenty percent wrong at A3 costs about a tenth
+/// of a cent — while at A7, where `B` is two orders of magnitude larger, the same
+/// twenty percent costs nearly eight. The pitch reported for a top note is only
+/// as good as the notes below it.
+///
+/// Returns `None` with nothing usable to fit.
+pub fn fit_f0_given_b(obs: &[Observation], b: f64) -> Option<Fit> {
+    let pts: Vec<&Observation> = obs
+        .iter()
+        .filter(|o| o.weight > 0.0 && o.hz > 0.0 && o.n >= 1)
+        .collect();
+    if pts.is_empty() || b < 0.0 {
+        return None;
+    }
+
+    // Start from whichever partial is trusted most, then refine. With stiffness
+    // fixed the residuals are linear in log frequency, so this converges at once
+    // and the iteration is only insurance.
+    let anchor = pts
+        .iter()
+        .max_by(|a, c| a.weight.total_cmp(&c.weight))
+        .unwrap();
+    let mut f0 = f0_from_partial_with_b(anchor.hz, b, anchor.n);
+    if f0.is_nan() || f0 <= 0.0 {
+        return None;
+    }
+
+    for _ in 0..4 {
+        let mut wsum = 0.0;
+        let mut weighted = 0.0;
+        for o in &pts {
+            let r = cents(partial_hz(f0, b, o.n), o.hz);
+            weighted += o.weight * r;
+            wsum += o.weight;
+        }
+        if wsum <= 0.0 {
+            return None;
+        }
+        let shift = weighted / wsum;
+        f0 *= (shift / CENTS_PER_LN).exp();
+        if shift.abs() < 1e-9 {
+            break;
+        }
+    }
+
+    let residuals_cents: Vec<f64> = obs
+        .iter()
+        .map(|o| {
+            if o.hz > 0.0 && o.n >= 1 {
+                cents(partial_hz(f0, b, o.n), o.hz)
+            } else {
+                f64::NAN
+            }
+        })
+        .collect();
+    let mut sse = 0.0;
+    let mut wsum = 0.0;
+    for (o, r) in obs.iter().zip(&residuals_cents) {
+        if o.weight > 0.0 && r.is_finite() {
+            sse += o.weight * r * r;
+            wsum += o.weight;
+        }
+    }
+
+    Some(Fit {
+        f0,
+        b,
+        rms_cents: if wsum > 0.0 { (sse / wsum).sqrt() } else { 0.0 },
+        residuals_cents,
+    })
+}
+
+/// The fundamental implied by one partial, given stiffness.
+#[inline]
+fn f0_from_partial_with_b(hz: f64, b: f64, n: u32) -> f64 {
+    let n = f64::from(n);
+    hz / (n * (1.0 + b * n * n).sqrt())
 }
 
 /// Peak nearest `target_hz`, within `tolerance_hz`, preferring louder peaks when
@@ -554,7 +657,14 @@ pub fn measure_note(
             used: true,
         });
     }
-    if partials.len() < cfg.min_partials {
+    // Two partials suffice when stiffness is already known from the notes below,
+    // which is how the top octave gets measured at all.
+    let needed = if cfg.b_hint.is_some() {
+        cfg.min_partials.min(2)
+    } else {
+        cfg.min_partials
+    };
+    if partials.len() < needed {
         return None;
     }
 
@@ -568,7 +678,13 @@ pub fn measure_note(
             weight: (0.05 + p.confidence).min(1.0),
         })
         .collect();
-    let fit = fit_inharmonicity(&observations)?;
+    // Fit both quantities where the partials support it; borrow the stiffness
+    // where they do not.
+    let fit_both_or_borrow = |obs: &[Observation]| -> Option<Fit> {
+        fit_inharmonicity(obs).or_else(|| cfg.b_hint.and_then(|b| fit_f0_given_b(obs, b)))
+    };
+
+    let fit = fit_both_or_borrow(&observations)?;
 
     for (p, r) in partials.iter_mut().zip(&fit.residuals_cents) {
         p.residual_cents = *r;
@@ -587,7 +703,7 @@ pub fn measure_note(
                 weight: (0.05 + p.confidence).min(1.0),
             })
             .collect();
-        match fit_inharmonicity(&kept) {
+        match fit_both_or_borrow(&kept) {
             Some(refit) => {
                 for p in partials.iter_mut() {
                     p.residual_cents = cents(partial_hz(refit.f0, refit.b, p.n), p.hz);
@@ -602,7 +718,7 @@ pub fn measure_note(
     };
 
     let used: Vec<&MeasuredPartial> = partials.iter().filter(|p| p.used).collect();
-    if used.len() < cfg.min_partials {
+    if used.len() < needed {
         return None;
     }
 
@@ -764,6 +880,69 @@ mod tests {
             fit.residuals_cents[4].abs() > 10.0,
             "the bad partial should be conspicuous, residual was {:.2}",
             fit.residuals_cents[4]
+        );
+    }
+
+    #[test]
+    fn a_borrowed_stiffness_rescues_a_note_with_too_few_partials() {
+        // The top of the piano. Two partials cannot determine both a fundamental
+        // and a stiffness — three points are needed to place a line — but the
+        // notes below have already said what the stiffness is up here.
+        let (f0, b) = (3520.0, 1.9e-2); // A7 on the measured baby grand
+        let two = exact_observations(f0, b, &[1, 2]);
+
+        assert!(
+            fit_inharmonicity(&two).is_none(),
+            "two partials must not be enough to fit both quantities"
+        );
+
+        let fit = fit_f0_given_b(&two, b).expect("borrowing stiffness should succeed");
+        assert!(
+            cents(f0, fit.f0).abs() < 0.01,
+            "borrowed fit put the fundamental {:.4} cents out",
+            cents(f0, fit.f0)
+        );
+        assert_eq!(fit.b, b, "the borrowed stiffness is returned unchanged");
+
+        // Even one partial is enough once stiffness is known.
+        let one = exact_observations(f0, b, &[2]);
+        let single = fit_f0_given_b(&one, b).expect("one partial and a known B");
+        assert!(cents(f0, single.f0).abs() < 0.01);
+    }
+
+    #[test]
+    fn borrowing_stiffness_is_cheap_in_the_middle_and_dear_at_the_top() {
+        // Borrowing is not free, and how expensive it is depends entirely on
+        // where the note sits. Stiffness stretches partial n by roughly B*n^2,
+        // so where B is small an error in it barely moves the fundamental, and
+        // where B is large it moves it a great deal.
+        //
+        // This is the honest limit on the treble measurement: the pitch reported
+        // for a top note is only as good as the stiffness handed to it, and the
+        // notes below have to be right for it to be right.
+        let same_error = 1.2; // twenty percent out
+
+        let (mid_f0, mid_b) = (220.0, 2.8e-4); // A3
+        let mid = fit_f0_given_b(&exact_observations(mid_f0, mid_b, &[1, 2]), mid_b * same_error)
+            .expect("fit failed");
+        let mid_err = cents(mid_f0, mid.f0).abs();
+        assert!(
+            mid_err < 0.5,
+            "in the middle a 20% stiffness error should barely matter: {mid_err:.3} cents"
+        );
+
+        let (top_f0, top_b) = (3520.0, 1.9e-2); // A7 on the measured baby grand
+        let top = fit_f0_given_b(&exact_observations(top_f0, top_b, &[1, 2]), top_b * same_error)
+            .expect("fit failed");
+        let top_err = cents(top_f0, top.f0).abs();
+        assert!(
+            top_err > 4.0,
+            "at the top the same error should cost dearly, but cost {top_err:.3} cents"
+        );
+
+        assert!(
+            top_err > mid_err * 10.0,
+            "the top should be far more sensitive: {top_err:.2} vs {mid_err:.2} cents"
         );
     }
 
