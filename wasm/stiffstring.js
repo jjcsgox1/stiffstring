@@ -183,6 +183,7 @@
      * its target, or a different note. That is an answer, not an error.
      */
     lockNote(samples, sampleRate, targetHz, b) {
+      if (!samples.length) return null;
       const inBytes = samples.length * 4;
       const outBytes = 6 * 8;
       const inPtr = this._alloc(inBytes);
@@ -221,6 +222,7 @@
      * reading briefly rather than blanking: a note fading is not a note moving.
      */
     track(samples, sampleRate, targetHz, b, partial, previousHz) {
+      if (!samples.length) return null;
       const inBytes = samples.length * 4;
       const outBytes = 5 * 8;
       const inPtr = this._alloc(inBytes);

@@ -93,6 +93,7 @@ canvas{display:block;width:100%;background:#0a0d11;border:1px solid var(--line);
 
 /* The tuning face. One number dominates; nothing else moves. */
 .meter{text-align:center;padding:2px 0 6px}
+.meter .lbl{font-family:var(--cond);text-transform:uppercase;letter-spacing:.09em;font-size:11px;color:var(--brass-soft)}
 .meter .now{font-family:var(--mono);font-size:34px;font-weight:500;line-height:1.1}
 .meter .aim{font-family:var(--mono);font-size:12.5px;color:var(--dim)}
 .meter .cents{
@@ -254,6 +255,7 @@ canvas{display:block;width:100%;background:#0a0d11;border:1px solid var(--line);
   </div>
   <div class="pbody">
     <div class="meter">
+      <div class="lbl" id="tuneStage">&nbsp;</div>
       <div class="now" id="tuneNote">&mdash;</div>
       <div class="aim" id="tuneAim">&nbsp;</div>
       <div class="cents" id="tuneCents">&mdash;</div>
@@ -290,8 +292,10 @@ canvas{display:block;width:100%;background:#0a0d11;border:1px solid var(--line);
         </select>
       </div>
     </div>
-    <p class="note">Both hands stay at the piano: strike, set the pin, and it moves on when the
-      note holds inside tolerance. Tap any key below to jump to it.</p>
+    <p class="note">Temperament first, F3 up to F4. Then on up the treble to C8, then back to E3
+      and down through the bass &mdash; always the next key along, never a jump. Both hands stay at
+      the piano: strike, set the pin, and it moves on by itself when the note holds inside
+      tolerance. Tap any key below to go somewhere else.</p>
     <div class="keys" id="keys"></div>
   </div>
 </div>
@@ -321,7 +325,12 @@ const METER_HISTORY = 8;    // readings the display holds a median over
 const METER_LOST_MS = 700;  // silence this long and the lock is let go
 const METER_STALE_MS = 350; // no fresh reading: dim the needle, do not blank it
 const SETTLE_MS = 1200;     // how long a note must hold before it counts as done
-const MIDDLE_KEY = 40;      // C4 — tuning works outward from here (D22)
+/* The tuning sequence: temperament first, then up, then down — and always the
+   next key along, never a jump. Working outward a semitone at a time from the
+   middle was tried and is confusing to follow at the piano, whatever it does
+   for the plate. */
+const TEMPERAMENT_LOW = 33;   // F3
+const TEMPERAMENT_HIGH = 45;  // F4
 
 const S = {
   engine:null, ac:null, stream:null, node:null, settings:null,
@@ -331,7 +340,7 @@ const S = {
   floorDb:-90, peakHold:0,
   plan:[], index:0, results:new Map(), lastKey:null,
   secondPass:false, curve:null, pianoId:null,
-  tuning:false, tuneKey:MIDDLE_KEY, order:[], tuned:new Set(),
+  tuning:false, tuneKey:TEMPERAMENT_LOW, order:[], tuned:new Set(),
   lock:null, readings:[], lastReadingAt:0, insideSince:0, meterTimer:0,
 };
 
@@ -729,15 +738,39 @@ function recentAudio(seconds){
   return out;
 }
 
-/* Middle outward (D22): the tension change is spread across the plate rather
-   than walked from one end of it to the other. */
+/* The three sections of an aural tuning, in the order they are laid: set the
+   temperament, carry it up, then come back for the bass. */
+const SECTIONS = [
+  { name: "Temperament", from: TEMPERAMENT_LOW, to: TEMPERAMENT_HIGH },
+  { name: "Up the treble", from: TEMPERAMENT_HIGH + 1, to: 88 },
+  { name: "Down the bass", from: TEMPERAMENT_LOW - 1, to: 1 },
+];
+
+/* Every key exactly once, each one next to the last. */
 function tuningOrder(){
-  const order = [MIDDLE_KEY];
-  for (let d = 1; d < 88; d++){
-    if (MIDDLE_KEY + d <= 88) order.push(MIDDLE_KEY + d);
-    if (MIDDLE_KEY - d >= 1) order.push(MIDDLE_KEY - d);
+  const order = [];
+  for (const s of SECTIONS){
+    const step = s.to >= s.from ? 1 : -1;
+    for (let k = s.from; k !== s.to + step; k += step) order.push(k);
   }
   return order;
+}
+
+function sectionFor(key){
+  for (const s of SECTIONS){
+    const lo = Math.min(s.from, s.to), hi = Math.max(s.from, s.to);
+    if (key >= lo && key <= hi) return s;
+  }
+  return SECTIONS[0];
+}
+
+function sectionLabel(key){
+  const s = sectionFor(key);
+  const lo = Math.min(s.from, s.to), hi = Math.max(s.from, s.to);
+  let done = 0;
+  for (let k = lo; k <= hi; k++) if (S.tuned.has(k)) done++;
+  return s.name + " · " + keyName(s.from) + " to " + keyName(s.to)
+    + " · " + done + " of " + (hi - lo + 1);
 }
 
 function startTuning(){
@@ -752,7 +785,8 @@ function startTuning(){
   $("#btnBack").disabled = false;
   setPill("#p4", "tuning", "good");
   setPill("#p2", "paused", null);
-  selectKey(S.tuned.size ? nextUntuned(MIDDLE_KEY) : MIDDLE_KEY);
+  // Pick up where the sequence left off rather than wherever the last tap was.
+  selectKey(S.order.find(k => !S.tuned.has(k)) || TEMPERAMENT_LOW);
   meterTick();
 }
 
@@ -768,7 +802,7 @@ function stopTuning(){
   // them: a target a note has already been set to must never move.
   $("#a4").disabled = S.tuned.size > 0;
   $("#stretch").disabled = S.tuned.size > 0;
-  setPill("#p4", S.tuned.size + " tuned", S.tuned.size ? "good" : null);
+  setPill("#p4", S.tuned.size + " of 88 tuned", S.tuned.size ? "good" : null);
   $("#tuneWay").textContent = "Stopped";
 }
 
@@ -778,6 +812,7 @@ function selectKey(key){
   S.readings = [];
   S.insideSince = 0;
   S.lastReadingAt = 0;
+  $("#tuneStage").textContent = sectionLabel(key);
   $("#tuneNote").textContent = keyName(key);
   $("#tuneAim").textContent = S.curve
     ? S.curve.hz[key-1].toFixed(2) + " Hz   " + S.curve.cents[key-1].toFixed(1) + "¢ from equal"
@@ -788,24 +823,22 @@ function selectKey(key){
   renderKeys();
 }
 
-function nextUntuned(from){
+/* Strictly the next key along, even if it has been tuned already. Skipping to
+   the next *untuned* one would send the technician somewhere else on the piano
+   without saying why, which is the one thing a tuning sequence must not do. */
+function nextInOrder(from){
   const i = S.order.indexOf(from);
-  for (let step = 1; step <= S.order.length; step++){
-    const k = S.order[(i + step) % S.order.length];
-    if (!S.tuned.has(k)) return k;
-  }
-  return from;
+  return i >= 0 && i + 1 < S.order.length ? S.order[i + 1] : from;
 }
 
 function markDone(){
   S.tuned.add(S.tuneKey);
-  setPill("#p4", S.tuned.size + " tuned", "good");
-  const next = nextUntuned(S.tuneKey);
-  selectKey(next);
+  setPill("#p4", S.tuned.size + " of 88 tuned", "good");
+  selectKey(nextInOrder(S.tuneKey));
 }
 
 function meterTick(){
-  if (!S.tuning) return;
+  if (!S.tuning || !S.ring) return;
   const began = performance.now();
   const key = S.tuneKey;
   const target = S.curve.hz[key-1];
