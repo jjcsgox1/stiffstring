@@ -313,6 +313,16 @@ const PREROLL_SECONDS = 0.15;
 const ONSET_RISE_DB = 14;
 const ONSET_FLOOR_DB = -62;
 const REARM_SECONDS = 0.9;
+
+/* Peak level a capture must reach to have been a struck note.
+   The onset test looks for a rise above the floor, which a chair, a pedal or
+   the swell of a beating note left ringing can all produce. Anything quieter
+   than this was the room, and the note on screen has not been played yet. */
+const STRIKE_PEAK_DBFS = -42;
+
+/* Tries before a note is given up on and the pass moves past it. The second
+   pass comes back for it later with a stiffness borrowed from its neighbours. */
+const ATTEMPTS_PER_NOTE = 3;
 const SETTLE_SECONDS = 1.5;
 const EXTRA_NOTES = 5;      // beyond the anchors, chosen by the engine
 const STORE_KEY = "stiffstring.pianos";
@@ -338,7 +348,7 @@ const S = {
   ring:null, ringLen:0, ringPos:0,
   armed:false, armedAt:0, capturing:false, capturedAt:0, capturedNeeded:0, captureStart:0,
   floorDb:-90, peakHold:0,
-  plan:[], index:0, results:new Map(), lastKey:null,
+  plan:[], index:0, results:new Map(), attempts:new Map(), lastKey:null,
   secondPass:false, curve:null, pianoId:null,
   tuning:false, tuneKey:TEMPERAMENT_LOW, order:[], tuned:new Set(),
   lock:null, readings:[], lastReadingAt:0, insideSince:0, meterTimer:0,
@@ -433,6 +443,7 @@ async function start(){
   S.plan = S.engine.anchorKeys().map(k => Math.round(k));
   S.index = 0;
   S.results.clear();
+  S.attempts.clear();
   S.secondPass = false;
 
   setPill("#p1", "measuring", "good");
@@ -510,25 +521,56 @@ function finishCapture(){
   const key = S.plan[S.index];
   const audio = grabCapture();
   S.peakHold = 0;
+
+  // Nothing was struck. Say so and keep waiting on the same note — counting
+  // this as an attempt, or worse advancing past it, would ask for the next note
+  // while this one is still on screen unplayed.
+  let peak = 0;
+  for (let i = 0; i < audio.length; i++){
+    const a = audio[i] < 0 ? -audio[i] : audio[i];
+    if (a > peak) peak = a;
+  }
+  if (dbfs(peak) < STRIKE_PEAK_DBFS){
+    $("#prompt").textContent = "Nothing heard — play it firmly";
+    setPill("#p2", "listening", "good");
+    return;
+  }
+
   setPill("#p2", "measuring", "busy");
   $("#prompt").textContent = "Measuring";
 
   // Yield first so the screen repaints before the engine takes the thread.
   setTimeout(() => {
     const m = S.engine.measureNote(audio, S.sampleRate, hintFor(key));
-    recordResult(key, m);
-    S.index++;
+    // Re-arm from the moment we are listening again, not from before a
+    // measurement that holds the thread for a few hundred milliseconds.
+    S.capturedAt = performance.now();
+    // A note that could not be measured keeps the screen. Moving on would look
+    // exactly like the note being skipped without ever being recorded, which is
+    // what it would be.
+    if (recordResult(key, m)) S.index++;
     advance();
   }, 0);
 }
 
+/* Returns whether the pass should move on from this note. */
 function recordResult(key, m){
   S.lastKey = key;
   if (!m){
+    const tries = (S.attempts.get(key) || 0) + 1;
+    S.attempts.set(key, tries);
+    if (tries < ATTEMPTS_PER_NOTE){
+      kv($("#lastResult"), [[keyName(key),
+        "nothing measurable in that — play it again, firmly (try " + tries +
+        " of " + ATTEMPTS_PER_NOTE + ")", "bad"]]);
+      return false;
+    }
     S.results.set(key, { key, ok:false });
-    kv($("#lastResult"), [[keyName(key), "no measurement — play it again, firmly", "bad"]]);
-    return;
+    kv($("#lastResult"), [[keyName(key),
+      "could not measure it after " + tries + " tries — coming back to this one", "bad"]]);
+    return true;
   }
+  S.attempts.delete(key);
   const nominal = S.engine.keyNominalHz(key, 440);
   const r = {
     key, ok:true, f0:m.f0, b:m.b, weight:m.weight,
@@ -547,6 +589,7 @@ function recordResult(key, m){
     ["Beating", beatText, r.beat === null ? null : "warn"],
     ["Fit", r.rmsCents.toFixed(2) + "¢" + (r.concerns.length ? "  — " + r.concerns.join(", ") : "")],
   ]);
+  return true;
 }
 
 function usableSamples(){
@@ -575,7 +618,7 @@ function advance(){
     const failed = [...S.results.values()].filter(r => !r.ok).map(r => r.key);
     if (failed.length){
       S.plan.push(...failed);
-      failed.forEach(k => S.results.delete(k));
+      failed.forEach(k => { S.results.delete(k); S.attempts.delete(k); });
       renderStrip(); showTarget();
       setPill("#p2", "retrying", "busy");
       $("#prompt").textContent = "These need another try";
@@ -595,7 +638,9 @@ function showTarget(){
   const key = S.plan[S.index];
   $("#target").textContent = keyName(key);
   $("#targetSub").textContent = "key " + key + " · about " + hintFor(key).toFixed(1) + " Hz";
-  $("#prompt").textContent = S.running ? "Waiting for the strike" : "Start the microphone first";
+  $("#prompt").textContent = !S.running ? "Start the microphone first"
+    : S.attempts.get(key) ? "Play " + keyName(key) + " again"
+    : "Waiting for the strike";
 }
 
 function renderStrip(){
@@ -1029,6 +1074,7 @@ $("#btnRedo").addEventListener("click", () => {
   const i = S.plan.indexOf(S.lastKey);
   if (i < 0) return;
   S.results.delete(S.lastKey);
+  S.attempts.delete(S.lastKey);
   S.index = i;
   S.lastKey = null;
   $("#btnRedo").disabled = true;
