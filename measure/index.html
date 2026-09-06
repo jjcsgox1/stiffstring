@@ -232,6 +232,7 @@ canvas{display:block;width:100%;background:#0a0d11;border:1px solid var(--line);
         </select>
       </div>
     </div>
+    <p class="note" id="pitchWhy">&nbsp;</p>
     <dl class="kv" id="curveInfo"></dl>
     <canvas id="chart" width="720" height="220"></canvas>
     <p class="note">Cents from equal temperament, A0 on the left to C8 on the right. Dots are the
@@ -335,6 +336,11 @@ const METER_HISTORY = 8;    // readings the display holds a median over
 const METER_LOST_MS = 700;  // silence this long and the lock is let go
 const METER_STALE_MS = 350; // no fresh reading: dim the needle, do not blank it
 const SETTLE_MS = 1200;     // how long a note must hold before it counts as done
+/* How far a piano may sit from standard and still be worth pulling all the way
+   up in one tuning. Beyond this it drops back before the next visit and a pitch
+   raise is the honest answer, so the targets are left where the piano is. */
+const EASY_PULL_CENTS = 15;
+
 /* The tuning sequence: temperament first, then up, then down — and always the
    next key along, never a jump. Working outward a semitone at a time from the
    middle was tried and is confusing to follow at the piano, whatever it does
@@ -361,6 +367,7 @@ const setPill = (sel, text, cls) => {
 };
 const dbfs = a => a > 0 ? 20 * Math.log10(a) : -Infinity;
 const cents = (from, to) => 1200 * Math.log2(to / from);
+const signed = (x, d) => (x >= 0 ? "+" : "−") + Math.abs(x).toFixed(d === undefined ? 1 : d);
 const median = xs => { if (!xs.length) return NaN; const s = [...xs].sort((a,b)=>a-b); return s[s.length>>1]; };
 
 function kv(el, rows){
@@ -676,13 +683,15 @@ function finish(){
   setPill("#p2", samples.length + " measured", "good");
   $("#curvePanel").classList.remove("hidden");
 
-  // Offer the piano's own pitch alongside standard, so a neglected instrument
-  // need not be dragged up in one visit.
-  const own = 440 * Math.pow(2, median(samples.map(s => cents(S.engine.keyNominalHz(s.key, 440), s.f0))) / 1200);
+  // Where the piano actually sits, and what to recommend about it (D14).
+  const ownCents = median(samples.map(s => cents(S.engine.keyNominalHz(s.key, 440), s.f0)));
+  const own = 440 * Math.pow(2, ownCents / 1200);
+  const easyPull = Math.abs(ownCents) <= EASY_PULL_CENTS;
+
   const sel = $("#a4");
   const wanted = [
     ["440", "440.0 Hz — standard"],
-    [own.toFixed(1), own.toFixed(1) + " Hz — as this piano sits"],
+    [own.toFixed(1), own.toFixed(1) + " Hz — leave it where it sits"],
     ["442", "442.0 Hz"],
     ["438", "438.0 Hz"],
   ];
@@ -692,7 +701,15 @@ function finish(){
     o.value = value; o.textContent = label;
     sel.appendChild(o);
   }
-  sel.value = own.toFixed(1);
+  // Default to standard unless the piano is too far down to pull in one pass.
+  // Recommending its own pitch on an instrument a few cents flat is how every
+  // target ends up quietly flat of what any other tuner will tell you.
+  sel.value = easyPull ? "440" : own.toFixed(1);
+  $("#pitchWhy").textContent = "This piano is sitting at A4 = " + own.toFixed(1) + " Hz, "
+    + signed(ownCents, 1) + "¢ from standard. " + (easyPull
+      ? "That is a short pull, so the targets below are set to 440."
+      : "That is a long way to pull in one pass and it will not hold, so the targets below are "
+        + "left at the piano's own pitch. Choose 440 to bring it up anyway.");
   solve();
   $("#curvePanel").scrollIntoView({ behavior:"smooth", block:"start" });
 }
@@ -706,7 +723,15 @@ function solve(){
   S.curve = curve;
   setPill("#p3", "solved", "good");
 
+  // What a chromatic tuner set to 440 will read, so it is never a surprise.
+  // Two things push the targets below standard and both are deliberate: the
+  // reference pitch, and stretch, which makes everything under A4 flat of equal
+  // temperament on purpose.
+  const fromStandard = cents(440, a4);
+  const f3 = cents(S.engine.keyNominalHz(33, 440), curve.hz[32]);
   kv($("#curveInfo"), [
+    ["Reference", a4.toFixed(1) + " Hz   " + signed(fromStandard) + "¢ from 440"],
+    ["Against a 440 tuner", "F3 reads " + signed(f3) + "¢, A4 reads " + signed(fromStandard) + "¢"],
     ["Notes measured", String(samples.length)],
     ["Bass break", curve.breakKey ? keyName(curve.breakKey) + " (key " + curve.breakKey + ")" : "none found"],
     ["Model spread", (Math.pow(10, curve.rmsLog10) * 100 - 100).toFixed(0) + "% in stiffness"],
@@ -859,8 +884,12 @@ function selectKey(key){
   S.lastReadingAt = 0;
   $("#tuneStage").textContent = sectionLabel(key);
   $("#tuneNote").textContent = keyName(key);
+  // Both numbers, because they answer different questions: the stretch is what
+  // this piano's own targets ask for, and the second is what any other tuner
+  // will show for the same note.
   $("#tuneAim").textContent = S.curve
-    ? S.curve.hz[key-1].toFixed(2) + " Hz   " + S.curve.cents[key-1].toFixed(1) + "¢ from equal"
+    ? S.curve.hz[key-1].toFixed(2) + " Hz · " + signed(S.curve.cents[key-1]) + "¢ stretch · "
+      + signed(cents(S.engine.keyNominalHz(key, 440), S.curve.hz[key-1])) + "¢ vs A440"
     : "";
   $("#tuneCents").textContent = "—";
   $("#tuneCents").className = "cents";
