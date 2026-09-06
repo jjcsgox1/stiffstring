@@ -127,6 +127,16 @@ td.bad{color:var(--bad)} td.warn{color:var(--brass)} td.good{color:var(--good)}
       <label for="pianoNotes">Condition notes</label>
       <input type="text" id="pianoNotes" placeholder="1970s, rusty bass, tenor won't hold" autocomplete="off">
     </div>
+    <div>
+      <label for="noteSet">How much to record</label>
+      <select id="noteSet">
+        <option value="survey">22 notes across the compass — about 5 minutes</option>
+        <option value="all">All 88 keys — about 20 minutes</option>
+      </select>
+    </div>
+    <p class="note">Twenty-two is enough to measure what a piano <em>is</em>. Record all 88 when
+      you have just tuned one by ear and want the tuning itself kept &mdash; a curve through
+      twenty-two samples cannot show a decision you made at one note.</p>
     <div class="row"><button class="primary" id="btnStart">Start microphone</button></div>
     <p class="err hidden" id="startErr"></p>
     <p class="note" id="ctxNote"></p>
@@ -172,6 +182,9 @@ td.bad{color:var(--bad)} td.warn{color:var(--brass)} td.good{color:var(--good)}
       <button class="primary" id="btnSave" disabled>Save this piano</button>
       <span class="note" id="saveSize"></span>
     </div>
+    <p class="note">Saving partway through a long run is safe and keeps everything recorded so
+      far. On all 88 keys the file runs to about 60 MB, so save once in the middle if the phone
+      starts to labour.</p>
     <div class="scroll"><table id="tbl"><thead><tr>
       <th>Note</th><th>Key</th><th>Peak dB</th><th>Length</th><th>Quality</th>
     </tr></thead><tbody></tbody></table></div>
@@ -189,8 +202,17 @@ const keyName = k => { const m = k + 20; return NAMES[m % 12] + (Math.floor(m / 
 const keyHz = k => 440 * Math.pow(2, (k - 49) / 12);
 
 // Spread across the compass, denser in the bass where the stiffness curve bends
-// hardest and where the wound-to-plain break has to be found.
-const TARGET_KEYS = [1,4,8,12,16,19,22,25,28,31,34,37,40,46,52,58,64,70,76,82,85,88];
+// hardest and where the wound-to-plain break has to be found. Enough to fit an
+// inharmonicity model, which is a smooth curve through a few samples.
+const SURVEY_KEYS = [1,4,8,12,16,19,22,25,28,31,34,37,40,46,52,58,64,70,76,82,85,88];
+
+// Every key. For capturing a finished aural tuning, where the point is not to
+// fit a smooth curve but to record a decision the technician made at each note
+// individually — the places a tuning is most interesting are exactly the ones a
+// smooth curve through 22 samples cannot see.
+const ALL_KEYS = Array.from({ length: 88 }, (_, i) => i + 1);
+
+let TARGET_KEYS = SURVEY_KEYS;
 
 const CAPTURE_SECONDS = 3.5;
 const PREROLL_SECONDS = 0.15;   // keep the attack, which arrives before we notice it
@@ -290,6 +312,11 @@ async function start(){
   S.running = true;
   S.armed = true;
   S.armedAt = performance.now();
+  // Fixed once recording starts: the note set decides what the strip and the
+  // manifest describe, and changing it midway would leave a half-filled plan.
+  TARGET_KEYS = $("#noteSet").value === "all" ? ALL_KEYS : SURVEY_KEYS;
+  $("#noteSet").disabled = true;
+
   setPill("#p1", "listening", "good");
   setPill("#p2", "ready", "good");
   $("#btnSkip").disabled = false;
@@ -372,7 +399,7 @@ function finishCapture(){
   showTarget();
   $("#btnRedo").disabled = false;
   $("#btnSave").disabled = S.takes.size === 0;
-  setPill("#p3", S.takes.size + " recorded", "good");
+  setPill("#p3", S.takes.size + " of " + TARGET_KEYS.length, "good");
   setPill("#p2", S.index >= TARGET_KEYS.length ? "all done" : "ready", "good");
 }
 
@@ -567,6 +594,7 @@ function save(){
     recorded: new Date().toISOString(),
     sampleRate: S.sampleRate,
     format: "32-bit float mono WAV",
+    noteSet: TARGET_KEYS.length === ALL_KEYS.length ? "all 88 keys" : "22-note survey",
     prerollSeconds: PREROLL_SECONDS,
     userAgent: navigator.userAgent,
     appliedConstraints: S.settings || null,
