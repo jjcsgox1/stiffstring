@@ -42,6 +42,12 @@ these can be tested by opening the files from disk.
     corpus/          real recordings, with their analyses — the regression set
     measure/ recorder/ engine-check/ spikes/    the pages above
 
+## Where to start
+
+[`HANDOFF.md`](HANDOFF.md) — the ten-minute orientation: state of play, what is proven, what is
+not, the faults that will bite you, and the decisions that were tested and should not be
+re-litigated.
+
 ## Plan and decisions
 
 [`PLAN.md`](PLAN.md) — the whole reasoning: what was decided, what each phase produced, and the
