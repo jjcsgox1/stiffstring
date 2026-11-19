@@ -91,37 +91,74 @@ canvas{display:block;width:100%;background:#0a0d11;border:1px solid var(--line);
 .saved{display:flex;flex-direction:column;gap:6px}
 .saved button{text-align:left;font-family:var(--mono);font-size:12.5px}
 
-/* The tuning face. One number dominates; nothing else moves. */
-.meter{text-align:center;padding:2px 0 6px}
-.meter .lbl{font-family:var(--cond);text-transform:uppercase;letter-spacing:.09em;font-size:11px;color:var(--brass-soft)}
-.meter .now{font-family:var(--mono);font-size:34px;font-weight:500;line-height:1.1}
-.meter .aim{font-family:var(--mono);font-size:12.5px;color:var(--dim)}
-.meter .cents{
-  font-family:var(--mono);font-weight:500;font-size:74px;line-height:1.05;
-  font-variant-numeric:tabular-nums;letter-spacing:-.03em;color:var(--dim);
+/* The tuning screen. It takes the whole phone while pins are being set: read at
+   arm's length, driven by a thumb, and nothing on it scrolls. */
+body.tuning{overflow:hidden}
+.tuner{
+  position:fixed;inset:0;z-index:10;background:var(--ground);overflow-y:auto;
+  padding:calc(env(safe-area-inset-top) + 10px) 16px calc(env(safe-area-inset-bottom) + 12px);
 }
-.meter .cents.near{color:var(--brass)}
-.meter .cents.on{color:var(--good)}
-.meter .cents.off{color:var(--bad)}
-.meter .way{font-family:var(--cond);text-transform:uppercase;letter-spacing:.14em;font-size:13px;color:var(--dim);min-height:1.4em}
-.needle{position:relative;height:34px;background:#0a0d11;border:1px solid var(--line);border-radius:3px;overflow:hidden}
-.needle .band{position:absolute;top:0;bottom:0;background:#16261f;border-left:1px solid #234034;border-right:1px solid #234034}
-.needle .mid{position:absolute;top:0;bottom:0;left:50%;width:1px;background:var(--line)}
-.needle .pin{position:absolute;top:3px;bottom:3px;width:3px;background:var(--brass);border-radius:1px;transform:translateX(-1px)}
-.needle .pin.on{background:var(--good)}
-.needle .pin.off{background:var(--bad)}
-.needle .pin.stale{opacity:.35}
-.ticks{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:3px}
+.tuner-in{max-width:520px;margin:0 auto;display:flex;flex-direction:column;gap:12px;min-height:100%}
+.t-top{display:flex;align-items:center;gap:10px}
+.t-top button{padding:7px 11px;font-size:13px}
+.t-piano{flex:1;min-width:0;font-size:13px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.t-count{font-family:var(--mono);font-size:12px;color:var(--dim);white-space:nowrap}
+.t-lbl{font-family:var(--cond);text-transform:uppercase;letter-spacing:.09em;font-size:11px;color:var(--dim)}
+.t-head{text-align:center}
+.t-stage{font-family:var(--cond);text-transform:uppercase;letter-spacing:.09em;font-size:11px;color:var(--brass-soft)}
+.t-name{font-family:var(--mono);font-size:52px;font-weight:500;line-height:1.05;letter-spacing:-.02em}
+.t-read{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.t-read>div{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:8px 10px 6px;text-align:center}
+.t-live{font-family:var(--mono);font-weight:500;font-size:46px;line-height:1.05;font-variant-numeric:tabular-nums;letter-spacing:-.03em;color:var(--dim)}
+.t-live.near{color:var(--brass)} .t-live.on{color:var(--good)} .t-live.off{color:var(--bad)}
+.t-live.stale{opacity:.4}
+.t-held{font-family:var(--mono);font-weight:500;font-size:46px;line-height:1.05;font-variant-numeric:tabular-nums;letter-spacing:-.03em;color:var(--ink)}
+.t-held.waiting{opacity:.35}
+.t-way{text-align:center;font-family:var(--cond);text-transform:uppercase;letter-spacing:.14em;font-size:13px;color:var(--dim);min-height:1.4em}
+.t-aim{text-align:center;font-family:var(--mono);font-size:12px;color:var(--dim)}
 
-/* Eighty-eight keys have to fit a thumb and a phone at once. */
-.keys{display:flex;flex-wrap:wrap;gap:2px}
-.keys button{
-  padding:0;width:30px;height:26px;font-family:var(--mono);font-size:10px;
-  border-radius:2px;background:#0a0d11;color:var(--dim);border:1px solid var(--line);
-}
-.keys button.black{background:#05070a}
-.keys button.done{color:var(--good);border-color:#2f5c48}
-.keys button.now{background:var(--brass);color:#1a1409;border-color:var(--brass);font-weight:600}
+/* One row per partial, each read against its own target. When the rows line
+   up the reading can be trusted; when they fan out, the stiffness is off or
+   something else is sounding. */
+.ladder{display:flex;flex-direction:column;gap:5px}
+.rung{display:grid;grid-template-columns:34px 1fr 52px;align-items:center;gap:8px}
+.rung .n{font-family:var(--mono);font-size:11px;color:var(--dim);text-align:right}
+.rung .v{font-family:var(--mono);font-size:12px;text-align:right;font-variant-numeric:tabular-nums;color:var(--dim)}
+.rung.main .n,.rung.main .v{color:var(--brass)}
+.rail{position:relative;height:16px;background:#0a0d11;border:1px solid var(--line);border-radius:8px}
+.rung.main .rail{border-color:var(--brass-soft)}
+.rail .tol{position:absolute;top:0;bottom:0;background:#16261f}
+.rail .zero{position:absolute;top:-3px;bottom:-3px;left:50%;width:1px;background:#3a4351}
+.rail .bead{position:absolute;top:2px;width:10px;height:10px;margin-left:-5px;border-radius:50%;background:var(--ink)}
+.rung.main .bead{background:var(--brass)}
+.rung.stale .bead{opacity:.25}
+.rung.stale .v{opacity:.4}
+.rail .edge{position:absolute;top:0;font-size:10px;line-height:14px;color:var(--bad)}
+.ladder-scale{display:grid;grid-template-columns:34px 1fr 52px;gap:8px;font-family:var(--mono);font-size:10px;color:var(--dim)}
+.ladder-scale span:nth-child(2){display:flex;justify-content:space-between}
+
+.unison{display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--panel);border:1px solid var(--line);border-radius:4px;font-size:13.5px}
+.unison .k{flex:1;color:var(--dim)}
+.unison .x{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.unison.beating .x{color:var(--brass)}
+.unison.false .x{color:var(--bad)}
+
+/* The whole piano as one strip of 88. Too narrow to tap a key on a phone, so
+   it is scrubbed: put a thumb down, slide, lift on the key wanted. */
+.whole{position:relative;touch-action:none;user-select:none;-webkit-user-select:none;cursor:pointer;padding-top:4px}
+.bars{display:flex;gap:1px;height:30px;align-items:flex-end}
+.bars i{flex:1;height:14px;background:#2b323e;border-radius:1px}
+.bars i.done{height:20px;background:var(--good)}
+.bars i.off{height:20px;background:var(--brass-soft)}
+.bars i.now{height:30px;background:var(--brass)}
+.bars i.pick{height:30px;background:var(--ink)}
+.octaves{position:relative;height:14px;font-family:var(--mono);font-size:10px;color:var(--dim)}
+.octaves span{position:absolute;transform:translateX(-50%)}
+.pickname{position:absolute;bottom:100%;transform:translateX(-50%);background:var(--ink);color:var(--ground);font-family:var(--mono);font-size:13px;font-weight:600;padding:2px 7px;border-radius:3px;margin-bottom:2px;pointer-events:none}
+.t-nav{display:grid;grid-template-columns:1fr 1.4fr;gap:10px;margin-top:auto}
+.t-nav button{height:52px;font-size:16px;font-family:var(--mono)}
+.t-opts{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.t-opts select{padding:7px 8px;font-size:13px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
@@ -255,52 +292,85 @@ canvas{display:block;width:100%;background:#0a0d11;border:1px solid var(--line);
     <span class="pill" id="p4">not started</span>
   </div>
   <div class="pbody">
-    <div class="meter">
-      <div class="lbl" id="tuneStage">&nbsp;</div>
-      <div class="now" id="tuneNote">&mdash;</div>
-      <div class="aim" id="tuneAim">&nbsp;</div>
-      <div class="cents" id="tuneCents">&mdash;</div>
-      <div class="way" id="tuneWay">Play the note</div>
-    </div>
-    <div>
-      <div class="needle">
-        <i class="band" id="needleBand"></i>
-        <i class="mid"></i>
-        <i class="pin hidden" id="needlePin"></i>
-      </div>
-      <div class="ticks"><span>&minus;20&cent;</span><span>flat &nbsp;|&nbsp; sharp</span><span>+20&cent;</span></div>
-    </div>
-    <p class="note" id="tuneDetail">&nbsp;</p>
-    <div class="row">
-      <button class="primary" id="btnTune">Start tuning</button>
-      <button id="btnDone" disabled>Mark done, next</button>
-      <button id="btnBack" disabled>Previous</button>
-    </div>
-    <div class="fields">
-      <div>
-        <label for="tol">Close enough</label>
-        <select id="tol">
-          <option value="0.5">Within 0.5&cent;</option>
-          <option value="1" selected>Within 1&cent;</option>
-          <option value="2">Within 2&cent;</option>
-        </select>
-      </div>
-      <div>
-        <label for="advance">When a note settles</label>
-        <select id="advance">
-          <option value="1" selected>Move on by itself</option>
-          <option value="0">Wait for me</option>
-        </select>
-      </div>
-    </div>
     <p class="note">Temperament first, F3 up to F4. Then on up the treble to C8, then back to E3
       and down through the bass &mdash; always the next key along, never a jump. Both hands stay at
       the piano: strike, set the pin, and it moves on by itself when the note holds inside
-      tolerance. Tap any key below to go somewhere else.</p>
-    <div class="keys" id="keys"></div>
+      tolerance.</p>
+    <div class="row">
+      <button class="primary" id="btnTune">Start tuning</button>
+    </div>
   </div>
 </div>
 
+</div>
+
+<div class="tuner hidden" id="tuner" role="dialog" aria-label="Tuning">
+ <div class="tuner-in">
+  <div class="t-top">
+    <button id="btnStop">&lsaquo; Stop</button>
+    <span class="t-piano" id="tPiano"></span>
+    <span class="t-count" id="tCount"></span>
+  </div>
+
+  <div class="t-head">
+    <div class="t-stage" id="tuneStage">&nbsp;</div>
+    <div class="t-name" id="tuneNote">&mdash;</div>
+    <div class="t-aim" id="tuneAim">&nbsp;</div>
+  </div>
+
+  <div class="t-read">
+    <div>
+      <div class="t-lbl">Live</div>
+      <div class="t-live" id="tuneCents">&mdash;</div>
+    </div>
+    <div>
+      <div class="t-lbl">Held after strike</div>
+      <div class="t-held waiting" id="tuneHeld">&mdash;</div>
+    </div>
+  </div>
+  <div class="t-way" id="tuneWay">Play the note</div>
+
+  <div>
+    <div class="t-lbl" style="margin-bottom:6px">Partials, each against its own target</div>
+    <div class="ladder" id="ladder"></div>
+    <div class="ladder-scale"><span></span><span><span>&minus;10&cent;</span><span>0</span><span>+10&cent;</span></span><span></span></div>
+  </div>
+
+  <div class="unison" id="unison"><span class="k" id="unisonK">Strings</span><span class="x" id="unisonX">&mdash;</span></div>
+
+  <div>
+    <div class="t-lbl" style="display:flex;justify-content:space-between;margin-bottom:2px">
+      <span>The whole piano</span><span>slide to choose a key</span>
+    </div>
+    <div class="whole" id="whole" role="slider" tabindex="0" aria-label="Key" aria-valuemin="1" aria-valuemax="88">
+      <div class="bars" id="bars"></div>
+      <div class="octaves" id="octaves"></div>
+    </div>
+  </div>
+
+  <div class="t-nav">
+    <button id="btnBack">&larr;</button>
+    <button class="primary" id="btnDone">Done &rarr;</button>
+  </div>
+
+  <div class="t-opts">
+    <div>
+      <label for="tol">Close enough</label>
+      <select id="tol">
+        <option value="0.5">Within 0.5&cent;</option>
+        <option value="1" selected>Within 1&cent;</option>
+        <option value="2">Within 2&cent;</option>
+      </select>
+    </div>
+    <div>
+      <label for="advance">When a note holds</label>
+      <select id="advance">
+        <option value="1" selected>Move on by itself</option>
+        <option value="0">Wait for me</option>
+      </select>
+    </div>
+  </div>
+ </div>
 </div>
 <script src="../wasm/stiffstring.js"></script>
 <script>
@@ -336,6 +406,24 @@ const METER_HISTORY = 8;    // readings the display holds a median over
 const METER_LOST_MS = 700;  // silence this long and the lock is let go
 const METER_STALE_MS = 350; // no fresh reading: dim the needle, do not blank it
 const SETTLE_MS = 1200;     // how long a note must hold before it counts as done
+
+/* The partial rows. Each tick reads the followed partial and one other, in
+   turn, so the rows cost one extra track call per update rather than five. */
+const LADDER_ROWS = 5;
+const LADDER_CENTS = 10;      // either side of zero on a row
+const LADDER_STALE_MS = 1600; // a row not refreshed this long is dimmed
+const LADDER_HISTORY = 3;     // readings a row takes the median of
+
+/* Held after strike. The pitch the ear judges is the one just after the
+   hammer, before the string settles flat as it decays. A strike is the followed
+   partial jumping in level; a reading window of half a second means the first
+   readings that are wholly after the blow arrive about 0.55 s later. This is a
+   display aid only — it never decides anything. */
+/* Amplitude ratio over the recent minimum. Well clear of what a beating unison
+   does to the level on its own, which would otherwise read as a blow per beat. */
+const STRIKE_RISE = 2.5;
+const HELD_FROM_S = 0.55;
+const HELD_TO_S = 1.3;
 /* How far a piano may sit from standard and still be worth pulling all the way
    up in one tuning. Beyond this it drops back before the next visit and a pitch
    raise is the honest answer, so the targets are left where the piano is. */
@@ -358,6 +446,8 @@ const S = {
   secondPass:false, curve:null, pianoId:null,
   tuning:false, tuneKey:TEMPERAMENT_LOW, order:[], tuned:new Set(),
   lock:null, readings:[], lastReadingAt:0, insideSince:0, meterTimer:0,
+  rungs:[], rungTurn:0, ladder:new Map(), amps:[], strike:null, held:null, seen:new Map(),
+  scrubbing:false,
 };
 
 const setPill = (sel, text, cls) => {
@@ -367,7 +457,11 @@ const setPill = (sel, text, cls) => {
 };
 const dbfs = a => a > 0 ? 20 * Math.log10(a) : -Infinity;
 const cents = (from, to) => 1200 * Math.log2(to / from);
-const signed = (x, d) => (x >= 0 ? "+" : "−") + Math.abs(x).toFixed(d === undefined ? 1 : d);
+const signed = (x, d) => {
+  const s = Math.abs(x).toFixed(d === undefined ? 1 : d);
+  // A reading that rounds to zero has no direction, and "−0.0" reads as flat.
+  return (Number(s) === 0 ? "" : x >= 0 ? "+" : "−") + s;
+};
 const median = xs => { if (!xs.length) return NaN; const s = [...xs].sort((a,b)=>a-b); return s[s.length>>1]; };
 
 function kv(el, rows){
@@ -855,6 +949,9 @@ function startTuning(){
   $("#btnBack").disabled = false;
   setPill("#p4", "tuning", "good");
   setPill("#p2", "paused", null);
+  $("#tPiano").textContent = $("#pName").value || "This piano";
+  $("#tuner").classList.remove("hidden");
+  document.body.classList.add("tuning");
   // Pick up where the sequence left off rather than wherever the last tap was.
   selectKey(S.order.find(k => !S.tuned.has(k)) || TEMPERAMENT_LOW);
   meterTick();
@@ -865,15 +962,32 @@ function stopTuning(){
   clearTimeout(S.meterTimer);
   S.lock = null;
   S.readings = [];
-  $("#btnTune").textContent = "Start tuning";
-  $("#btnDone").disabled = true;
-  $("#btnBack").disabled = true;
+  $("#tuner").classList.add("hidden");
+  document.body.classList.remove("tuning");
+  $("#btnTune").textContent = S.tuned.size ? "Carry on tuning" : "Start tuning";
   // The reference and the stretch stay locked once anything has been tuned to
   // them: a target a note has already been set to must never move.
   $("#a4").disabled = S.tuned.size > 0;
   $("#stretch").disabled = S.tuned.size > 0;
   setPill("#p4", S.tuned.size + " of 88 tuned", S.tuned.size ? "good" : null);
-  $("#tuneWay").textContent = "Stopped";
+}
+
+/* Where partial n of this key should sit if the note were exactly on target. */
+const partialTarget = (key, n) => {
+  const f0 = S.curve.hz[key-1], b = S.curve.b[key-1];
+  return n * f0 * Math.sqrt(1 + b * n * n);
+};
+
+/* The partials worth a row: inside the range the meter can follow, lowest first.
+   The same limits the engine uses, so a row is never offered that it would refuse. */
+function rungsFor(key){
+  const out = [];
+  const top = Math.min(5000, (S.sampleRate || 48000) * 0.45);
+  for (let n = 1; n <= 8 && out.length < LADDER_ROWS; n++){
+    const hz = partialTarget(key, n);
+    if (hz >= 90 && hz <= top) out.push(n);
+  }
+  return out;
 }
 
 function selectKey(key){
@@ -882,18 +996,32 @@ function selectKey(key){
   S.readings = [];
   S.insideSince = 0;
   S.lastReadingAt = 0;
+  S.ladder = new Map();
+  S.amps = [];
+  S.strike = null;
+  S.held = null;
+  S.rungs = S.curve ? rungsFor(key) : [];
+  S.rungTurn = 0;
   $("#tuneStage").textContent = sectionLabel(key);
   $("#tuneNote").textContent = keyName(key);
   // Both numbers, because they answer different questions: the stretch is what
   // this piano's own targets ask for, and the second is what any other tuner
   // will show for the same note.
   $("#tuneAim").textContent = S.curve
-    ? S.curve.hz[key-1].toFixed(2) + " Hz · " + signed(S.curve.cents[key-1]) + "¢ stretch · "
-      + signed(cents(S.engine.keyNominalHz(key, 440), S.curve.hz[key-1])) + "¢ vs A440"
+    ? "target " + S.curve.hz[key-1].toFixed(2) + " Hz · " + signed(S.curve.cents[key-1]) + "¢ stretch · "
+      + signed(cents(S.engine.keyNominalHz(key, 440), S.curve.hz[key-1])) + "¢ on a 440 tuner"
     : "";
   $("#tuneCents").textContent = "—";
-  $("#tuneCents").className = "cents";
-  $("#needlePin").classList.add("hidden");
+  $("#tuneCents").className = "t-live";
+  $("#tuneHeld").textContent = "—";
+  $("#tuneHeld").className = "t-held waiting";
+  const i = S.order.indexOf(key);
+  $("#btnBack").innerHTML = i > 0 ? "&larr; " + keyName(S.order[i-1]) : "&larr;";
+  $("#btnDone").innerHTML = i >= 0 && i + 1 < S.order.length
+    ? "Done &rarr; " + keyName(S.order[i+1]) : "Done";
+  $("#tCount").textContent = S.tuned.size + " / 88 tuned";
+  buildLadder();
+  paintUnison(null);
   renderKeys();
 }
 
@@ -921,7 +1049,11 @@ function meterTick(){
 
   if (!S.lock){
     const l = S.engine.lockNote(audio, S.sampleRate, target, b);
-    if (l){ S.lock = l; S.readings = []; S.lastReadingAt = began; }
+    if (l){
+      S.lock = l; S.readings = []; S.lastReadingAt = began; S.amps = [];
+      // A fresh lock is a fresh blow: nothing was sounding a moment ago.
+      S.strike = { at: began, readings: [] };
+    }
   } else {
     const r = S.engine.track(audio, S.sampleRate, target, b, S.lock.partial, S.lock.hz);
     if (r){
@@ -931,13 +1063,18 @@ function meterTick(){
       S.readings.push(r);
       if (S.readings.length > METER_HISTORY) S.readings.shift();
       S.lastReadingAt = began;
+      noteStrike(r, began);
     } else if (began - S.lastReadingAt > METER_LOST_MS){
       S.lock = null;
       S.readings = [];
     }
   }
 
+  // One other partial per tick, in turn, for the rows.
+  if (S.lock) readOneRung(audio, key, b, began);
+
   paintMeter(began);
+  paintLadder(began);
 
   // The interval follows what the work actually costs, so a slower phone gets a
   // slower meter rather than a stalled one.
@@ -945,48 +1082,157 @@ function meterTick(){
   S.meterTimer = setTimeout(meterTick, Math.max(METER_MIN_MS, cost * 2.5));
 }
 
+/* Watch the followed partial's level for a fresh blow, and once the window just
+   after it has gone by, settle what was read in it into the held number. */
+function noteStrike(r, now){
+  const floor = S.amps.length ? Math.min(...S.amps) : Infinity;
+  S.amps.push(r.amplitude);
+  if (S.amps.length > 4) S.amps.shift();
+  if (r.amplitude > floor * STRIKE_RISE) S.strike = { at: now, readings: [] };
+
+  if (!S.strike) return;
+  const age = (now - S.strike.at) / 1000;
+  if (age >= HELD_FROM_S && age <= HELD_TO_S) S.strike.readings.push(r);
+  if (age > HELD_TO_S){
+    const s = S.strike.readings.length >= 2 ? S.engine.settle(S.strike.readings) : null;
+    if (s) S.held = s.cents;
+    S.strike = null;
+  }
+}
+
+/* Read the next row's partial, aimed every time at where the followed partial
+   says the note is *now*. A row is read only once every few ticks, so its own
+   last frequency can be well out of date after a pin turn; aimed there, it was
+   seen to settle on something a semitone away and report it with confidence. */
+const RUNG_DISAGREE_CENTS = 25;
+function readOneRung(audio, key, b, now){
+  const others = S.rungs.filter(n => n !== S.lock.partial);
+  if (!others.length) return;
+  const n = others[S.rungTurn++ % others.length];
+  const mainCents = cents(partialTarget(key, S.lock.partial), S.lock.hz);
+  const hint = partialTarget(key, n) * Math.pow(2, mainCents / 1200);
+  const r = S.engine.track(audio, S.sampleRate, S.curve.hz[key-1], b, n, hint);
+  // Stiffness error and a rough unison move a row by a few cents, never by
+  // this much. A reading this far from the followed partial is the tracker
+  // having found some other component, and showing it would be a lie.
+  if (!r || Math.abs(r.cents - mainCents) > RUNG_DISAGREE_CENTS) return;
+  const row = S.ladder.get(n);
+  const hist = row ? row.hist : [];
+  hist.push(r.cents);
+  if (hist.length > LADDER_HISTORY) hist.shift();
+  S.ladder.set(n, { hz: r.hz, hist, at: now });
+}
+
+const ORD = n => n + (n === 1 ? "st" : n === 2 ? "nd" : n === 3 ? "rd" : "th");
+
+function buildLadder(){
+  const box = $("#ladder");
+  box.innerHTML = "";
+  if (!S.rungs.length){
+    box.innerHTML = '<p class="note">No partial of this note is in the range the meter can follow.</p>';
+    return;
+  }
+  for (const n of S.rungs){
+    const row = document.createElement("div");
+    row.className = "rung stale";
+    row.dataset.n = String(n);
+    row.innerHTML = '<span class="n">' + ORD(n) + '</span>'
+      + '<span class="rail"><i class="tol"></i><i class="zero"></i><i class="bead"></i></span>'
+      + '<span class="v">—</span>';
+    box.appendChild(row);
+  }
+}
+
+function paintLadder(now){
+  const tol = Number($("#tol").value);
+  const place = c => 50 + Math.max(-LADDER_CENTS, Math.min(LADDER_CENTS, c)) / LADDER_CENTS * 50;
+  const settled = S.readings.length ? S.engine.settle(S.readings) : null;
+  for (const row of $("#ladder").children){
+    const n = Number(row.dataset.n);
+    if (!n) continue;
+    const band = row.querySelector(".tol");
+    band.style.left = place(-tol) + "%";
+    band.style.width = (place(tol) - place(-tol)) + "%";
+    const main = S.lock && S.lock.partial === n;
+    let c = null, fresh = false;
+    if (main && settled){ c = settled.cents; fresh = now - S.lastReadingAt <= METER_STALE_MS; }
+    else if (!main && S.ladder.has(n)){
+      const r = S.ladder.get(n);
+      c = median(r.hist); fresh = now - r.at <= LADDER_STALE_MS;
+    }
+    row.classList.toggle("main", !!main);
+    row.classList.toggle("stale", c === null || !fresh);
+    const bead = row.querySelector(".bead");
+    const v = row.querySelector(".v");
+    let edge = row.querySelector(".edge");
+    if (c === null){ v.textContent = "—"; bead.style.left = "50%"; if (edge) edge.remove(); continue; }
+    bead.style.left = place(c) + "%";
+    v.textContent = signed(c);
+    // Off the end of the rail: say which end, rather than parking the bead there
+    // as though that were the reading.
+    if (Math.abs(c) > LADDER_CENTS){
+      if (!edge){ edge = document.createElement("i"); edge.className = "edge"; row.querySelector(".rail").appendChild(edge); }
+      edge.textContent = c > 0 ? "▶" : "◀";
+      edge.style.left = c > 0 ? "auto" : "4px";
+      edge.style.right = c > 0 ? "4px" : "auto";
+    } else if (edge) edge.remove();
+  }
+}
+
+function stringsFor(key){
+  if (key <= Number($("#pSingle").value || 0)) return 1;
+  if (key <= Number($("#pDouble").value || 0)) return 2;
+  return 3;
+}
+
+/* How many strings this note has and whether they are heard beating. One string
+   cannot make a unison, so a beat on one is a false beat and says so. */
+function paintUnison(beat){
+  const n = stringsFor(S.tuneKey);
+  const box = $("#unison");
+  $("#unisonK").textContent = n === 1 ? "Single string"
+    : (n === 2 ? "Two strings" : "Three strings") + " · unison";
+  if (!beat){
+    $("#unisonX").textContent = S.lock ? "no beat heard" : "—";
+    box.className = "unison";
+  } else {
+    $("#unisonX").textContent = (n === 1 ? "false beat " : "beating ") + beat.toFixed(1) + " /s";
+    box.className = "unison " + (n === 1 ? "false" : "beating");
+  }
+}
+
 function paintMeter(now){
   const tol = Number($("#tol").value);
   const s = S.readings.length ? S.engine.settle(S.readings) : null;
   const stale = now - S.lastReadingAt > METER_STALE_MS;
   const el = $("#tuneCents");
-  const pin = $("#needlePin");
+  const held = $("#tuneHeld");
 
-  // The tolerance band, drawn to the same scale as the needle.
-  const place = c => 50 + Math.max(-20, Math.min(20, c)) / 20 * 50;
-  const band = $("#needleBand");
-  band.style.left = place(-tol) + "%";
-  band.style.width = (place(tol) - place(-tol)) + "%";
+  if (S.held !== null){
+    held.textContent = signed(S.held);
+    held.className = "t-held" + (S.strike ? " waiting" : "");
+  }
 
   if (!s){
     el.textContent = "—";
-    el.className = "cents";
-    pin.classList.add("hidden");
+    el.className = "t-live";
     $("#tuneWay").textContent = S.lock ? "Listening" : "Play the note";
-    $("#tuneDetail").innerHTML = "&nbsp;";
+    paintUnison(null);
     S.insideSince = 0;
     return;
   }
 
   const c = s.cents;
+  S.seen.set(S.tuneKey, c);
   const inside = Math.abs(c) <= tol;
-  el.textContent = (c >= 0 ? "+" : "−") + Math.abs(c).toFixed(1);
-  el.className = "cents " + (inside ? "on" : Math.abs(c) <= tol * 3 ? "near" : "off");
-  pin.classList.remove("hidden");
-  pin.style.left = place(c) + "%";
-  pin.className = "pin" + (inside ? " on" : Math.abs(c) <= tol * 3 ? "" : " off")
+  el.textContent = signed(c);
+  el.className = "t-live " + (inside ? "on" : Math.abs(c) <= tol * 3 ? "near" : "off")
     + (stale ? " stale" : "");
-  $("#tuneWay").textContent = inside ? "Holding" : c < 0 ? "Flat — raise it" : "Sharp — lower it";
+  $("#tuneWay").textContent = inside ? "Holding"
+    : (c < 0 ? "Flat — raise it" : "Sharp — lower it")
+      + (s.spread > tol * 2 ? " · swinging ±" + (s.spread/2).toFixed(1) + "¢" : "");
 
-  // What the reading rests on, so a number that cannot be trusted says so.
-  const bits = ["partial " + S.lock.partial];
-  const beat = S.readings[S.readings.length-1].beatHz;
-  if (beat){
-    const single = S.tuneKey <= Number($("#pSingle").value || 0);
-    bits.push(beat.toFixed(1) + " beats/sec — " + (single ? "false beat, tuning cannot cure it" : "unison not set"));
-  }
-  if (s.spread > tol * 2) bits.push("reading swinging ±" + (s.spread/2).toFixed(1) + "¢");
-  $("#tuneDetail").textContent = bits.join(" · ");
+  paintUnison(S.readings[S.readings.length-1].beatHz);
 
   // D23: a note completes itself once it has held inside tolerance, so both
   // hands can stay where they are. A swinging reading is not held.
@@ -998,26 +1244,73 @@ function paintMeter(now){
   }
 }
 
-function renderKeys(){
-  const box = $("#keys");
-  if (box.childElementCount !== 88){
-    box.innerHTML = "";
+/* ---- the whole-piano strip ---- */
+function renderKeys(pick){
+  const bars = $("#bars");
+  if (bars.childElementCount !== 88){
+    bars.innerHTML = "";
+    for (let k = 1; k <= 88; k++) bars.appendChild(document.createElement("i"));
+    const oct = $("#octaves");
+    oct.innerHTML = "";
     for (let k = 1; k <= 88; k++){
-      const b = document.createElement("button");
       const name = keyName(k);
-      b.textContent = name;
-      b.dataset.key = String(k);
-      if (name.includes("#")) b.classList.add("black");
-      b.addEventListener("click", () => selectKey(k));
-      box.appendChild(b);
+      if (name.startsWith("C") && !name.includes("#")){
+        const s = document.createElement("span");
+        s.textContent = name;
+        s.style.left = ((k - 0.5) / 88 * 100) + "%";
+        if (k === 88) s.style.transform = "translateX(-80%)";
+        oct.appendChild(s);
+      }
     }
   }
-  for (const b of box.children){
-    const k = Number(b.dataset.key);
-    b.classList.toggle("done", S.tuned.has(k));
-    b.classList.toggle("now", k === S.tuneKey);
-  }
+  const tol = Number($("#tol").value);
+  [...bars.children].forEach((b, i) => {
+    const k = i + 1;
+    const seen = S.seen.get(k);
+    b.className = k === pick ? "pick"
+      : k === S.tuneKey ? "now"
+      : S.tuned.has(k) ? "done"
+      : seen !== undefined && Math.abs(seen) > tol * 3 ? "off" : "";
+  });
+  const w = $("#whole");
+  w.setAttribute("aria-valuenow", String(S.tuneKey));
+  w.setAttribute("aria-valuetext", keyName(S.tuneKey));
 }
+
+function keyAt(clientX){
+  const r = $("#bars").getBoundingClientRect();
+  return Math.max(1, Math.min(88, Math.floor((clientX - r.left) / r.width * 88) + 1));
+}
+
+function showPick(k){
+  let tag = $("#pickname");
+  if (!tag){ tag = document.createElement("span"); tag.id = "pickname"; tag.className = "pickname"; $("#whole").appendChild(tag); }
+  tag.textContent = keyName(k);
+  tag.style.left = ((k - 0.5) / 88 * 100) + "%";
+  renderKeys(k);
+}
+
+function endPick(k){
+  const tag = $("#pickname");
+  if (tag) tag.remove();
+  if (k) selectKey(k); else renderKeys();
+}
+
+const whole = $("#whole");
+whole.addEventListener("pointerdown", e => {
+  S.scrubbing = true;
+  whole.setPointerCapture(e.pointerId);
+  showPick(keyAt(e.clientX));
+});
+whole.addEventListener("pointermove", e => { if (S.scrubbing) showPick(keyAt(e.clientX)); });
+whole.addEventListener("pointerup", e => { if (!S.scrubbing) return; S.scrubbing = false; endPick(keyAt(e.clientX)); });
+whole.addEventListener("pointercancel", () => { S.scrubbing = false; endPick(null); });
+whole.addEventListener("keydown", e => {
+  const step = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+  if (!step) return;
+  e.preventDefault();
+  selectKey(Math.max(1, Math.min(88, S.tuneKey + step)));
+});
 
 /* ---------------- storage ---------------- */
 const loadStore = () => { try { return JSON.parse(localStorage.getItem(STORE_KEY)) || []; } catch(e){ return []; } };
@@ -1122,7 +1415,8 @@ $("#btnBack").addEventListener("click", () => {
   const i = S.order.indexOf(S.tuneKey);
   if (i > 0) selectKey(S.order[i - 1]);
 });
-$("#tol").addEventListener("change", () => { S.insideSince = 0; });
+$("#btnStop").addEventListener("click", stopTuning);
+$("#tol").addEventListener("change", () => { S.insideSince = 0; renderKeys(); });
 window.addEventListener("resize", drawChart);
 
 renderSaved();

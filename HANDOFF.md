@@ -63,10 +63,12 @@ Everything is live at <https://jjcsgox1.github.io/stiffstring/> and deploys on `
 
 1. **Nobody has completed a whole tuning with it.** That is phase 6's own gate and the single most
    important outstanding item. Everything else is building on an unverified base.
-2. **Unison assistance.** A piano note has two or three strings and the app says nothing about
-   setting them. The owner can work around it with mutes, as he would anyway, but it is the
-   obvious missing piece of the loop. The measurement already exists — beat rate per partial and
-   string spread per note are computed and simply not surfaced where they would be used.
+2. **Unison assistance.** The full-screen tuning view (2026-11-19) now shows the string count and
+   the meter's beat rate, and a row per partial so a rough unison shows as rows fanning out. That
+   is display only. Nothing yet guides setting the unison, and on synthetic two-string tones the
+   meter's beat rate did not register at all — check it on a real unison before building on it.
+   The view's "held after strike" reading is triggered by a jump in the followed partial's level;
+   it is untested against real hammer blows.
 3. **Phase 5 calibration.** Needs complete aural tunings recorded at all 88 keys, on more than one
    piano, plus the repeatability control.
 4. **The repeatability control has not started.** The owner tunes one piano twice, some weeks
