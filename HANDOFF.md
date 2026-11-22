@@ -251,3 +251,11 @@ is healthy.
 Then do the thing the project most needs and has never had: **get it used on a real job and find
 out what breaks.** Every genuine fault in the last two months was found that way, and none of them
 by testing.
+
+**Pitch correction (owner's rule).** In the pitch sheet. When on, every note aims past its own
+stretched target by half of how far it measured out in the measuring pass (20¢ flat → aim 10¢
+sharp; sharp notes the same way, flat), capped at a chosen limit — 10¢ recommended, up to 50¢.
+Unmeasured keys take the line between measured neighbours. The meter, strobe rows and key
+following all read against the aim; the tuning screen states the overpull and what a 440 tuner
+will show. Switching it on or off clears the ticks (a fresh pass), and turning it on moves the
+reference to 440. Code: `computeRaise`, `aimHz`, `changeRaise` in measure/index.html.

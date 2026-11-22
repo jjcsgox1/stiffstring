@@ -115,6 +115,7 @@ dd.good{color:var(--good)} dd.bad{color:var(--bad)} dd.warn{color:var(--warn)}
 .bignote{font-family:var(--mono);font-size:54px;font-weight:600;color:var(--note);line-height:1.05;letter-spacing:-.02em;transition:color .15s}
 .bignote.followed{color:var(--good)}
 .aim{font-family:var(--mono);font-size:12px;color:var(--dim)}
+.aim.raising{color:var(--warn);font-weight:600}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
 
 /* Measure mode */
@@ -389,6 +390,17 @@ th{font-family:var(--sans);font-size:11px;color:var(--dim);font-weight:600;text-
           </select></div>
         <p class="note hidden" id="pitchLocked">Locked: notes have been tuned to these settings, and a note already tuned must never move.</p>
       </div>
+      <div class="card stack">
+        <div><label for="raise">Pitch correction</label>
+          <select id="raise"><option value="0" selected>Off &mdash; tune to the targets</option><option value="1">On &mdash; go past by half</option></select></div>
+        <div><label for="raiseCap">Most it goes past</label>
+          <select id="raiseCap">
+            <option value="5">5&cent;</option><option value="10" selected>10&cent; &mdash; recommended safe limit</option>
+            <option value="15">15&cent;</option><option value="20">20&cent;</option><option value="25">25&cent;</option>
+            <option value="30">30&cent;</option><option value="40">40&cent;</option><option value="50">50&cent;</option>
+          </select></div>
+        <p class="note" id="raiseWhy">&nbsp;</p>
+      </div>
       <div class="card"><dl class="kv" id="curveInfo"></dl></div>
       <button class="primary hidden" id="btnStartTuning" style="width:100%;height:50px">Start tuning</button>
     </div>
@@ -546,6 +558,83 @@ const STROBE_EASE_S = 0.12;   // how quickly the drift follows a new reading
    up in one tuning. Beyond this it drops back before the next visit and a pitch
    raise is the honest answer, so the targets are left where the piano is. */
 const EASY_PULL_CENTS = 15;
+
+/* Pitch correction, the owner's rule: a note is tuned past its target by half of
+   how far it measured out, in the other direction, and never further than the
+   chosen limit. 20 cents flat → 10 sharp; 8 flat → 4 sharp; 40 flat → still 10
+   at the recommended limit. A sharp note gets the same rule the other way.
+
+   "How far out" is against this piano's own stretched, inharmonicity-aware
+   target for that key, not against a 440 chromatic tuner, so the overpull
+   follows the curve. It is worked out from the measuring pass — where the
+   piano sat before any pin was turned — and does not move as notes are tuned. */
+const RAISE_FRACTION = 0.5;
+function computeRaise(){
+  S.raise = new Array(88).fill(0);
+  if (!S.curve || $("#raise").value !== "1") return;
+  const cap = Number($("#raiseCap").value) || 10;
+  const known = [];
+  for (const r of S.results.values()) if (r.ok) known.push([r.key, cents(S.curve.hz[r.key-1], r.f0)]);
+  known.sort((a, b) => a[0] - b[0]);
+  if (!known.length) return;
+  for (let k = 1; k <= 88; k++){
+    // A key that was not measured takes the line between its measured neighbours.
+    let lo = null, hi = null;
+    for (const p of known){ if (p[0] <= k) lo = p; if (p[0] >= k && !hi) hi = p; }
+    const off = !lo ? hi[1] : !hi ? lo[1] : lo[0] === hi[0] ? lo[1]
+      : lo[1] + (hi[1] - lo[1]) * (k - lo[0]) / (hi[0] - lo[0]);
+    S.raise[k-1] = Math.max(-cap, Math.min(cap, -off * RAISE_FRACTION));
+  }
+}
+const raiseFor = key => (S.raise && S.raise[key-1]) || 0;
+/* What the meter aims at: the target, plus any pitch correction. */
+const aimHz = key => S.curve.hz[key-1] * Math.pow(2, raiseFor(key) / 1200);
+
+function explainRaise(){
+  const on = $("#raise").value === "1";
+  $("#raiseCap").disabled = !on;
+  if (!on){
+    $("#raiseWhy").textContent = "For a piano well off pitch. Each note is tuned past its target by half of "
+      + "how far it measured out — 20¢ flat is tuned 10¢ sharp — so it settles near pitch as the rest come up. "
+      + "Then turn this off and tune again to the targets.";
+    return;
+  }
+  const cap = Number($("#raiseCap").value);
+  let most = 0, mostKey = 0, capped = 0;
+  for (let k = 1; k <= 88; k++){
+    const v = raiseFor(k);
+    if (Math.abs(v) > Math.abs(most)){ most = v; mostKey = k; }
+    if (Math.abs(v) >= cap - 1e-9) capped++;
+  }
+  $("#raiseWhy").textContent = "On. Every note aims past its own target by half of how far it measured out, "
+    + "up to " + cap + "¢" + (cap > 10 ? " — more than the 10¢ recommended" : "") + ". "
+    + (mostKey ? "Most: " + keyName(mostKey) + " " + signed(most) + "¢. " : "")
+    + (capped ? capped + " note" + (capped === 1 ? "" : "s") + " held at the limit. " : "")
+    + "The meter reads against the aim, and the screen says how far past the target it is.";
+}
+
+/* Switching it either way starts a fresh pass: the ticks from the other pass
+   belong to different aims. */
+function changeRaise(){
+  if (S.tuned.size){
+    const ok = confirm("Start a fresh pass? The " + S.tuned.size + " ticked notes will be cleared, because they were tuned to different aims.");
+    if (ok){
+      S.tuned = new Set();
+      $("#a4").disabled = false; $("#stretch").disabled = false;
+      $("#pitchLocked").classList.add("hidden");
+    }
+  }
+  // Correcting pitch towards where the piano already sits does nothing.
+  if ($("#raise").value === "1" && !$("#a4").disabled && Number($("#a4").value) !== 440){
+    const std = [...$("#a4").options].find(o => Number(o.value) === 440);
+    if (std){ $("#a4").value = std.value; solve(); }
+  }
+  computeRaise();
+  explainRaise();
+  savePiano();
+  if (S.tuning) selectKey(S.tuneKey);
+  refresh();
+}
 
 /* The tuning sequence: temperament first, then up, then down — and always the
    next key along, never a jump. Working outward a semitone at a time from the
@@ -795,6 +884,7 @@ function resetPianoState(){
   S.tuned = new Set(); S.seen = new Map(); S.order = tuningOrder(); S.tuneKey = TEMPERAMENT_LOW;
   S.graphKey = null;
   $("#a4").innerHTML = ""; $("#a4").disabled = false; $("#stretch").disabled = false; $("#stretch").value = "1";
+  $("#raise").value = "0"; $("#raiseCap").value = "10"; S.raise = null;
   kv($("#lastResult"), [["Last note", "none yet"]]);
   $("#btnRedo").disabled = true;
 }
@@ -844,6 +934,8 @@ async function openPiano(p){
   if (S.engine && usableSamples().length >= 4){
     buildPitchOptions(p.a4);
     $("#stretch").value = String(p.stretch || 1);
+    $("#raise").value = p.raise && p.raise.on ? "1" : "0";
+    $("#raiseCap").value = String(p.raise && p.raise.cap || 10);
     S.solvedOnce = true;
     solve();
     S.mode = "tune";
@@ -862,6 +954,7 @@ function pianoRecord(){
     stringing: { single: S.piano.single, double: S.piano.double },
     a4: Number($("#a4").value) || 440,
     stretch: Number($("#stretch").value),
+    raise: { on: $("#raise").value === "1", cap: Number($("#raiseCap").value) },
     samples: usableSamples(),
     tuned: [...S.tuned],
     savedAt: new Date().toISOString(),
@@ -1189,7 +1282,7 @@ function buildPitchOptions(saved){
     + signed(ownCents, 1) + "¢ from standard. " + (easyPull
       ? "That is a short pull, so 440 is recommended."
       : "That is a long way to pull in one pass and it will not hold, so its own pitch is "
-        + "recommended. Choose 440 to bring it up anyway.");
+        + "recommended. To bring it to 440, choose 440 and turn on Pitch correction below.");
 }
 
 function finish(){
@@ -1221,6 +1314,8 @@ function solve(){
   const curve = S.engine.solveCurve(samples, { a4Hz:a4, stretch });
   if (!curve){ $("#pitchWhy").textContent = "Could not solve a tuning from these notes."; return; }
   S.curve = curve;
+  computeRaise();
+  explainRaise();
 
   // What a chromatic tuner set to 440 will read, so it is never a surprise.
   // Two things push the targets below standard and both are deliberate: the
@@ -1420,7 +1515,7 @@ function sectionLabel(key){
   const lo = Math.min(s.from, s.to), hi = Math.max(s.from, s.to);
   let done = 0;
   for (let k = lo; k <= hi; k++) if (S.tuned.has(k)) done++;
-  return s.name + " · " + keyName(s.from) + " to " + keyName(s.to)
+  return ($("#raise").value === "1" ? "Pitch correction · " : "") + s.name + " · " + keyName(s.from) + " to " + keyName(s.to)
     + " · " + done + " of " + (hi - lo + 1);
 }
 
@@ -1445,7 +1540,7 @@ function stopTuningMeter(){
 
 /* Where partial n of this key should sit if the note were exactly on target. */
 const partialTarget = (key, n) => {
-  const f0 = S.curve.hz[key-1], b = S.curve.b[key-1];
+  const f0 = aimHz(key), b = S.curve.b[key-1];
   return n * f0 * Math.sqrt(1 + b * n * n);
 };
 
@@ -1479,10 +1574,16 @@ function selectKey(key){
   // Both numbers, because they answer different questions: the stretch is what
   // this piano's own targets ask for, and the second is what any other tuner
   // will show for the same note.
-  $("#tuneAim").textContent = S.curve
-    ? "target " + S.curve.hz[key-1].toFixed(2) + " Hz · " + signed(S.curve.cents[key-1]) + "¢ stretch · "
-      + signed(cents(S.engine.keyNominalHz(key, 440), S.curve.hz[key-1])) + "¢ on a 440 tuner"
-    : "";
+  // Pitch correction changes where the note is aimed, so it says so here, with
+  // what a 440 tuner will show for the aim itself.
+  const rc = S.curve ? raiseFor(key) : 0;
+  $("#tuneAim").textContent = !S.curve ? ""
+    : $("#raise").value === "1"
+      ? "pitch correction · aim " + signed(rc, 1) + "¢ past target · "
+        + aimHz(key).toFixed(2) + " Hz · " + signed(cents(S.engine.keyNominalHz(key, 440), aimHz(key))) + "¢ on a 440 tuner"
+      : "target " + S.curve.hz[key-1].toFixed(2) + " Hz · " + signed(S.curve.cents[key-1]) + "¢ stretch · "
+        + signed(cents(S.engine.keyNominalHz(key, 440), S.curve.hz[key-1])) + "¢ on a 440 tuner";
+  $("#tuneAim").classList.toggle("raising", $("#raise").value === "1");
   $("#tuneCents").textContent = "—";
   $("#tuneCents").className = "live";
   $("#tuneHeld").textContent = "—";
@@ -1573,7 +1674,7 @@ function expectCents(){
   const overall = measured.size ? median([...measured.values()]) : 0;
   const out = new Array(88);
   for (let k = 1; k <= 88; k++){
-    const base = S.tuned.has(k) ? 0 : measured.has(k) ? measured.get(k) : overall;
+    const base = S.tuned.has(k) ? raiseFor(k) : measured.has(k) ? measured.get(k) : overall;
     const seen = S.seen.get(k);
     out[k-1] = seen === undefined ? base
       : base + Math.max(-SEEN_TRUST_CENTS, Math.min(SEEN_TRUST_CENTS, seen - base));
@@ -1611,7 +1712,7 @@ function meterTick(){
     return;
   }
   const key = S.tuneKey;
-  const target = S.curve.hz[key-1];
+  const target = aimHz(key);
   const b = S.curve.b[key-1];
   const audio = recentAudio(METER_SECONDS);
 
@@ -1678,7 +1779,7 @@ function readOneRung(audio, key, b, now){
   const n = others[S.rungTurn++ % others.length];
   const mainCents = cents(partialTarget(key, S.lock.partial), S.lock.hz);
   const hint = partialTarget(key, n) * Math.pow(2, mainCents / 1200);
-  const r = S.engine.track(audio, S.sampleRate, S.curve.hz[key-1], b, n, hint);
+  const r = S.engine.track(audio, S.sampleRate, aimHz(key), b, n, hint);
   // Stiffness error and a rough unison move a row by a few cents, never by
   // this much. A reading this far from the followed partial is the tracker
   // having found some other component, and showing it would be a lie.
@@ -2031,6 +2132,8 @@ $("#btnFinish").addEventListener("click", () => { S.capturing = false; S.index =
 
 $("#a4").addEventListener("change", solve);
 $("#stretch").addEventListener("change", solve);
+$("#raise").addEventListener("change", changeRaise);
+$("#raiseCap").addEventListener("change", changeRaise);
 $("#btnDone").addEventListener("click", markDone);
 $("#btnBack").addEventListener("click", () => {
   const i = S.order.indexOf(S.tuneKey);
