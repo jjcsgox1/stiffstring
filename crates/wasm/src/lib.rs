@@ -28,6 +28,7 @@
 use std::alloc::{alloc, dealloc, Layout};
 
 use stiffstring_core::curve::{solve, CurveConfig};
+use stiffstring_core::detect::{identify, Decision, Keyboard};
 use stiffstring_core::inharmonicity::{measure_note, Concern, MeasureConfig};
 use stiffstring_core::meter::{lock_note, settle, track, Reading};
 use stiffstring_core::piano::{
@@ -40,7 +41,8 @@ use stiffstring_core::piano::{
 /// 2: added unison spread per note and beat rate per partial.
 /// 3: stiffness per key added to the curve output; note-choosing exposed.
 /// 4: the live meter — locking, tracking, and what to put on the display.
-pub const ABI_VERSION: u32 = 4;
+/// 5: naming the key just struck, so the meter can follow the technician.
+pub const ABI_VERSION: u32 = 5;
 
 #[no_mangle]
 pub extern "C" fn ss_abi_version() -> u32 {
@@ -287,6 +289,82 @@ pub unsafe extern "C" fn ss_track(
     // Zero stands for "not beating", as everywhere else in this interface.
     dst[4] = r.beat_hz.unwrap_or(0.0);
     5
+}
+
+/// Name the key just struck.
+///
+/// `samples` holds the audio around a blow: `split` samples from just before
+/// it, then the rest from the blow on. A third of a second each way is ideal.
+///
+/// `keyboard` is `keys * 3` `f64`s, three arrays one after another: each key's
+/// target in Hz, its stiffness, and where its string is believed to sit now in
+/// cents from its target (0 once tuned, its measured offset if measured, the
+/// piano's overall offset otherwise). `current` is the key being tuned, or 0.
+///
+/// Writes to `out`:
+///
+/// ```text
+/// [0] decision: 0 nothing new sounded, 1 the same key, 2 switch,
+///               3 stay — a neighbour fits but more likely this string far out,
+///               4 stay — two keys fit about equally
+/// [1] the key to tune now (the current one unless the decision is 2), or 0
+/// [2] best-fitting key, or 0
+/// [3] its string's offset from its target, cents
+/// [4] partials of it found, [5] partials expected
+/// [6] best unrelated key, or 0, [7] its score as a share of the best's
+/// ```
+///
+/// Returns 8, or 0 on bad arguments.
+///
+/// # Safety
+/// `samples` must point to `len` readable `f32`s, `keyboard` to `keys * 3`
+/// readable `f64`s and `out` to `out_len` writable `f64`s.
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn ss_identify(
+    samples: *const f32,
+    len: usize,
+    split: usize,
+    sample_rate: f64,
+    keyboard: *const f64,
+    keys: usize,
+    current: u32,
+    out: *mut f64,
+    out_len: usize,
+) -> usize {
+    if samples.is_null() || keyboard.is_null() || out.is_null() || len == 0 || keys == 0
+        || out_len < 8 || split > len || sample_rate.is_nan() || sample_rate <= 0.0
+    {
+        return 0;
+    }
+    let audio = std::slice::from_raw_parts(samples, len);
+    let kb = std::slice::from_raw_parts(keyboard, keys * 3);
+    let piano = Keyboard {
+        targets_hz: &kb[..keys],
+        b: &kb[keys..keys * 2],
+        expect_cents: &kb[keys * 2..],
+    };
+    let cur = u8::try_from(current).ok().filter(|&k| k >= 1 && usize::from(k) <= keys);
+    let d = identify(audio, split, sample_rate, piano, cur);
+    let dst = std::slice::from_raw_parts_mut(out, 8);
+    dst[0] = match d.decision {
+        Decision::Nothing => 0.0,
+        Decision::Same => 1.0,
+        Decision::Switch => 2.0,
+        Decision::StayNeighbour => 3.0,
+        Decision::Unsure => 4.0,
+    };
+    dst[1] = d.key_to_tune(cur).map_or(0.0, f64::from);
+    dst[2] = d.best.map_or(0.0, |c| f64::from(c.key));
+    dst[3] = d.best.map_or(0.0, |c| c.cents);
+    dst[4] = d.best.map_or(0.0, |c| c.matched as f64);
+    dst[5] = d.best.map_or(0.0, |c| c.expected as f64);
+    dst[6] = d.second.map_or(0.0, |c| f64::from(c.key));
+    dst[7] = match (d.best, d.second) {
+        (Some(b), Some(s)) if b.score > 0.0 => s.score / b.score,
+        _ => 0.0,
+    };
+    8
 }
 
 /// Turn a short run of readings into the one number to show.

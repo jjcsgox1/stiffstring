@@ -184,6 +184,7 @@ Each of these was found the hard way. The constants involved are calibrated, not
       piano.rs           inharmonicity across 88 keys, bass break, note choosing
       curve.rs           the weighted least-squares tuning solver
       meter.rs           the live tracker
+      detect.rs          which key was just struck — matched against the piano's own 88 targets
       wav.rs             parsing-only WAV decode, so it compiles to WASM too
     crates/wasm/src/lib.rs   the C ABI — layouts documented on each function
     wasm/                    compiled module + loader, committed because Pages serves them
@@ -198,9 +199,22 @@ Each of these was found the hard way. The constants involved are calibrated, not
     cargo run -p stiffstring-core --example meter_check     --release -- corpus/<folder>
     cargo run -p stiffstring-core --example intervals       --release -- corpus/<folder> [a4Hz]
     cargo run -p stiffstring-core --example compare_sessions --release -- corpus/<a> corpus/<b>
+    cargo run -p stiffstring-core --example identify_corpus  --release -- corpus/<folder> [model folder]
 
 `intervals` is the one that grades a *tuning* rather than the engine: it reports what each octave
 actually beats at, beside what the solver would have asked for.
+
+`identify_corpus` grades the key detector (`detect.rs`) — the "follow the key I play" feature —
+in the situations it meets at the piano: from silence, moving on from a neighbour or octave, the
+same key again, the string being tuned 30–60 cents out, and struck over the last note ringing. A
+WRONG is a switch to a key that was not struck; staying put only costs a tap. As of 2026-11-22,
+across all three sessions and with the model measured on a different day: no wrong switches in
+ordinary playing. The remaining misses are strings pushed 60 cents out, which physics cannot
+separate from the neighbour.
+
+**`grand-at-home-2026-09-04/D#3-key31.wav` holds C#3, not D#3.** Found by the detector, confirmed
+by `measure_note`, which cannot measure it as D#3. The report skips it. `E1-key8.wav` in the same
+session has no silence before the blow and C1 still ringing, so it cannot be graded fairly.
 
 ### Environment notes
 

@@ -12,6 +12,7 @@
 //!   how far is this note from a target we already know.
 
 pub mod curve;
+pub mod detect;
 pub mod estimate;
 pub mod fft;
 pub mod inharmonicity;

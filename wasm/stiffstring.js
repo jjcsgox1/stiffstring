@@ -13,7 +13,7 @@
 (function (global) {
   "use strict";
 
-  const EXPECTED_ABI = 4;
+  const EXPECTED_ABI = 5;
 
   const NOTE_HEADER = 7;
   const PARTIAL_STRIDE = 7;
@@ -207,6 +207,62 @@
         };
       } finally {
         this._free(inPtr, inBytes);
+        this._free(outPtr, outBytes);
+      }
+    }
+
+    /**
+     * Name the key just struck.
+     *
+     * `samples` is the audio around a blow, `split` samples of it from before.
+     * `curve` is what `solveCurve` returned; `expectCents` is 88 numbers, where
+     * each string is believed to sit now relative to its target. `current` is
+     * the key being tuned, or 0.
+     *
+     * Returns { decision, keyToTune, best, cents, matched, expected, second,
+     * secondShare }, where decision is "nothing", "same", "switch",
+     * "neighbour" (stay: probably this string far out) or "unsure" (stay).
+     * Only "switch" moves the screen; everything else keeps the current key.
+     */
+    identify(samples, split, sampleRate, curve, expectCents, current) {
+      if (!samples.length) return null;
+      const keys = curve.hz.length;
+      const inBytes = samples.length * 4;
+      const kbBytes = keys * 3 * 8;
+      const outBytes = 8 * 8;
+      const inPtr = this._alloc(inBytes);
+      let kbPtr = 0, outPtr = 0;
+      try {
+        kbPtr = this._alloc(kbBytes);
+        outPtr = this._alloc(outBytes);
+        // Views are taken after every allocation: growing the heap detaches them.
+        this._f32().set(samples, inPtr / 4);
+        const f64 = this._f64();
+        const k = kbPtr / 8;
+        for (let i = 0; i < keys; i++){
+          f64[k + i] = curve.hz[i];
+          f64[k + keys + i] = curve.b[i];
+          f64[k + keys * 2 + i] = expectCents[i] || 0;
+        }
+        const written = this.exports.ss_identify(
+          inPtr, samples.length, split, sampleRate, kbPtr, keys, current || 0, outPtr, 8
+        );
+        if (written === 0) return null;
+        const out = this._f64();
+        const base = outPtr / 8;
+        return {
+          decision: ["nothing", "same", "switch", "neighbour", "unsure"][out[base]] || "nothing",
+          keyToTune: out[base + 1] || null,
+          best: out[base + 2] || null,
+          cents: out[base + 3],
+          matched: out[base + 4],
+          expected: out[base + 5],
+          second: out[base + 6] || null,
+          secondShare: out[base + 7],
+        };
+      } finally {
+        this._free(inPtr, inBytes);
+        this._free(kbPtr, kbBytes);
         this._free(outPtr, outBytes);
       }
     }

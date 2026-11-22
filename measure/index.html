@@ -4,380 +4,426 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="color-scheme" content="light dark">
 <title>Stiffstring</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
+/* Light by day, dark in a dim room: the phone decides. Brass is the one accent;
+   green means on target or done, red means off. */
 :root{
-  --ground:#101319; --panel:#171b23; --panel-hi:#1e242e; --line:#2b323e;
-  --ink:#e7ebf2; --dim:#8b95a4; --brass:#c9a15a; --brass-soft:#8a6f3d;
-  --good:#56b38a; --bad:#d9645a;
+  --bg:#f3f1ec; --card:#ffffff; --card2:#f8f6f2; --line:#e3dfd6; --line2:#cfcabf;
+  --ink:#1c1e22; --dim:#6c7179; --faint:#a3a7ad;
+  --brass:#a8762a; --brass-bg:#f4e9d6; --on-brass:#ffffff;
+  --good:#2e8a5e; --good-bg:#e3f2ea; --bad:#c4473d; --bad-bg:#f8e4e1;
+  --wkey:#ffffff; --wkey-edge:#cfcabf; --bkey:#2a2d33; --dimmer:rgba(20,18,14,.38);
   --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
-  --cond:"IBM Plex Sans Condensed","IBM Plex Sans",system-ui,sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
 }
-*{box-sizing:border-box}
-body{
-  margin:0;background:var(--ground);color:var(--ink);
-  font-family:var(--sans);font-size:15px;line-height:1.55;
-  -webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent;
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#101319; --card:#171b23; --card2:#1d222b; --line:#2b323e; --line2:#3a4351;
+    --ink:#e7ebf2; --dim:#8b95a4; --faint:#5d6672;
+    --brass:#c9a15a; --brass-bg:#2c2618; --on-brass:#1a1409;
+    --good:#56b38a; --good-bg:#15281f; --bad:#e0685e; --bad-bg:#2e1715;
+    --wkey:#d9dce2; --wkey-edge:#8e96a3; --bkey:#0a0c10; --dimmer:rgba(0,0,0,.55);
+  }
 }
-.wrap{max-width:720px;margin:0 auto;padding:16px 16px 90px}
-header{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;padding-bottom:10px;border-bottom:1px solid var(--line);margin-bottom:14px}
-h1{font-family:var(--cond);font-weight:600;font-size:20px;margin:0;letter-spacing:.03em;color:var(--brass)}
-header .sub{color:var(--dim);font-size:12.5px;margin:0}
-
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:4px;margin-bottom:12px;overflow:hidden}
-.phead{display:flex;align-items:center;gap:10px;padding:9px 14px;background:var(--panel-hi);border-bottom:1px solid var(--line)}
-.pnum{font-family:var(--mono);font-size:11px;color:var(--brass-soft);border:1px solid var(--brass-soft);border-radius:2px;padding:1px 5px;flex:none}
-.ptitle{font-family:var(--cond);font-weight:600;text-transform:uppercase;letter-spacing:.09em;font-size:13px;margin:0;flex:1}
-.pill{font-family:var(--mono);font-size:11px;letter-spacing:.04em;padding:2px 8px;border-radius:2px;border:1px solid var(--line);color:var(--dim);white-space:nowrap;flex:none}
-.pill.good{color:var(--good);border-color:#2f5c48}
-.pill.bad{color:var(--bad);border-color:#6b3430}
-.pill.busy{color:var(--brass);border-color:var(--brass-soft)}
-.pbody{padding:14px}
-.pbody>*+*{margin-top:12px}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;
+  -webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent}
+.hidden{display:none!important}
 p{margin:0}
 .note{color:var(--dim);font-size:13px}
 .err{color:var(--bad);font-size:13px}
-.hidden{display:none!important}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
 
-button{font-family:var(--sans);font-size:14px;font-weight:500;background:var(--panel-hi);color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:10px 15px;cursor:pointer}
-button:hover:not(:disabled){border-color:var(--brass-soft);color:var(--brass)}
-button:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+button{font-family:var(--sans);font-size:15px;font-weight:500;background:var(--card);color:var(--ink);
+  border:1px solid var(--line2);border-radius:10px;padding:10px 14px;cursor:pointer}
 button:disabled{opacity:.4;cursor:default}
-button.primary{background:var(--brass);color:#1a1409;border-color:var(--brass);font-weight:600}
-button.primary:hover:not(:disabled){background:#dcb164;color:#1a1409}
-.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-
-label{font-family:var(--cond);text-transform:uppercase;letter-spacing:.09em;font-size:11px;color:var(--dim);display:block;margin-bottom:4px}
-input[type=text],input[type=number],select{
-  width:100%;background:#0a0d11;color:var(--ink);border:1px solid var(--line);
-  border-radius:3px;padding:9px 10px;font-family:var(--sans);font-size:15px;
-}
-input:focus,select:focus{outline:none;border-color:var(--brass-soft)}
+button:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+button.primary{background:var(--brass);border-color:var(--brass);color:var(--on-brass);font-weight:600}
+button.plain{background:none;border:none;color:var(--brass);padding:8px 6px}
+label{display:block;font-size:12px;font-weight:500;color:var(--dim);margin-bottom:4px}
+input[type=text],input[type=number],select{width:100%;background:var(--card2);color:var(--ink);
+  border:1px solid var(--line);border-radius:9px;padding:9px 10px;font-family:var(--sans);font-size:16px}
+input:focus,select:focus{outline:none;border-color:var(--brass)}
 .fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-@media (max-width:520px){.fields{grid-template-columns:1fr}}
-
-/* The measuring face: everything here is read at arm's length. */
-.stage{text-align:center;padding:4px 0}
-.stage .lbl{font-family:var(--cond);text-transform:uppercase;letter-spacing:.09em;font-size:11px;color:var(--dim)}
-.stage .name{font-family:var(--mono);font-size:64px;font-weight:500;line-height:1.02;letter-spacing:-.02em}
-.stage .sub{font-family:var(--mono);font-size:13px;color:var(--dim)}
-.prompt{text-align:center;font-family:var(--cond);text-transform:uppercase;letter-spacing:.1em;font-size:13px;color:var(--brass);min-height:1.4em}
-.bar{height:12px;background:#0a0d11;border:1px solid var(--line);border-radius:2px;overflow:hidden}
-.bar>i{display:block;height:100%;background:var(--brass);width:0%}
-.bar>i.hot{background:var(--bad)}
-
-.strip{display:flex;flex-wrap:wrap;gap:4px}
-.strip>span{font-family:var(--mono);font-size:11px;padding:3px 6px;border-radius:2px;border:1px solid var(--line);color:var(--dim)}
-.strip>span.done{color:var(--good);border-color:#2f5c48}
-.strip>span.warn{color:var(--brass);border-color:var(--brass-soft)}
-.strip>span.failed{color:var(--bad);border-color:#6b3430}
-.strip>span.now{background:var(--brass);color:#1a1409;border-color:var(--brass);font-weight:600}
-
+.stack>*+*{margin-top:12px}
 dl.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:0}
 dl.kv dt{font-size:13px;color:var(--dim)}
 dl.kv dd{margin:0;font-family:var(--mono);font-size:13px;font-variant-numeric:tabular-nums}
 dd.good{color:var(--good)} dd.bad{color:var(--bad)} dd.warn{color:var(--brass)}
 
-table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12.5px;font-variant-numeric:tabular-nums}
-th,td{text-align:right;padding:4px 7px;border-bottom:1px solid var(--line)}
-th:first-child,td:first-child{text-align:left}
-th{font-family:var(--cond);text-transform:uppercase;letter-spacing:.08em;font-size:11px;color:var(--dim);font-weight:600}
-td.bad{color:var(--bad)} td.warn{color:var(--brass)} td.good{color:var(--good)}
-.scroll{overflow-x:auto}
-canvas{display:block;width:100%;background:#0a0d11;border:1px solid var(--line);border-radius:3px}
-.saved{display:flex;flex-direction:column;gap:6px}
-.saved button{text-align:left;font-family:var(--mono);font-size:12.5px}
+/* ---------- screens ---------- */
+.screen{position:fixed;inset:0;display:flex;flex-direction:column;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left)}
 
-/* The tuning screen. It takes the whole phone while pins are being set: read at
-   arm's length, driven by a thumb, and nothing on it scrolls. */
-body.tuning{overflow:hidden}
-.tuner{
-  position:fixed;inset:0;z-index:10;background:var(--ground);overflow-y:auto;
-  padding:calc(env(safe-area-inset-top) + 10px) 16px calc(env(safe-area-inset-bottom) + 12px);
-}
-.tuner-in{max-width:520px;margin:0 auto;display:flex;flex-direction:column;gap:12px;min-height:100%}
-.t-top{display:flex;align-items:center;gap:10px}
-.t-top button{padding:7px 11px;font-size:13px}
-.t-piano{flex:1;min-width:0;font-size:13px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.t-count{font-family:var(--mono);font-size:12px;color:var(--dim);white-space:nowrap}
-.t-lbl{font-family:var(--cond);text-transform:uppercase;letter-spacing:.09em;font-size:11px;color:var(--dim)}
-.t-head{text-align:center}
-.t-stage{font-family:var(--cond);text-transform:uppercase;letter-spacing:.09em;font-size:11px;color:var(--brass-soft)}
-.t-name{font-family:var(--mono);font-size:52px;font-weight:500;line-height:1.05;letter-spacing:-.02em}
-.t-read{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.t-read>div{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:8px 10px 6px;text-align:center}
-.t-live{font-family:var(--mono);font-weight:500;font-size:46px;line-height:1.05;font-variant-numeric:tabular-nums;letter-spacing:-.03em;color:var(--dim)}
-.t-live.near{color:var(--brass)} .t-live.on{color:var(--good)} .t-live.off{color:var(--bad)}
-.t-live.stale{opacity:.4}
-.t-held{font-family:var(--mono);font-weight:500;font-size:46px;line-height:1.05;font-variant-numeric:tabular-nums;letter-spacing:-.03em;color:var(--ink)}
-.t-held.waiting{opacity:.35}
-.t-way{text-align:center;font-family:var(--cond);text-transform:uppercase;letter-spacing:.14em;font-size:13px;color:var(--dim);min-height:1.4em}
-.t-aim{text-align:center;font-family:var(--mono);font-size:12px;color:var(--dim)}
+/* Home: the pianos this phone knows. */
+.home{overflow-y:auto}
+.home-in{max-width:560px;width:100%;margin:0 auto;padding:22px 16px 40px}
+.brand{font-size:26px;font-weight:600;letter-spacing:-.01em;margin:0}
+.brand-sub{color:var(--dim);font-size:14px;margin:2px 0 22px}
+.list{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.list button{display:flex;width:100%;text-align:left;align-items:center;gap:12px;border:none;border-radius:0;
+  border-bottom:1px solid var(--line);padding:13px 14px;background:none}
+.list button:last-child{border-bottom:none}
+.list .t{flex:1;min-width:0}
+.list .t b{display:block;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.list .t span{font-size:13px;color:var(--dim)}
+.list .chev{color:var(--faint);font-size:20px}
+.section-h{font-size:12px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin:22px 4px 8px}
+.empty{padding:22px 16px;text-align:center;color:var(--dim);font-size:14px}
 
-/* One row per partial, each read against its own target. When the rows line
-   up the reading can be trusted; when they fan out, the stiffness is off or
-   something else is sounding. */
+/* Instrument screen: bar, mode switch, stage, keyboard. Nothing but the
+   stage ever scrolls vertically. */
+.bar{display:flex;align-items:center;gap:6px;padding:8px 10px 6px;background:var(--card);border-bottom:1px solid var(--line)}
+.bar .title{flex:1;min-width:0;text-align:center}
+.bar .title b{display:block;font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar .title span{display:block;font-size:12px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.icon{width:38px;height:38px;padding:0;display:inline-flex;align-items:center;justify-content:center;border:none;background:none;color:var(--brass);border-radius:10px}
+.icon svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.pitchbtn{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--brass);background:var(--brass-bg);border:none;border-radius:8px;padding:5px 7px;line-height:1.15;text-align:center}
+.pitchbtn small{display:block;font-size:9.5px;font-weight:500;opacity:.8}
+.seg{display:flex;margin:10px 14px 0;background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:3px}
+.seg button{flex:1;border:none;background:none;border-radius:8px;padding:7px;font-size:14px;color:var(--dim)}
+.seg button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.stage{flex:1;min-height:0;overflow-y:auto;padding:12px 14px}
+.stage-in{max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:12px;min-height:100%}
+.gate{margin:auto 0;text-align:center;display:flex;flex-direction:column;gap:12px;align-items:center;padding:20px 0}
+.gate button{min-width:220px;height:52px;font-size:16px}
+
+.lbl{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--dim)}
+.head{text-align:center}
+.stagename{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--brass)}
+.bignote{font-family:var(--mono);font-size:54px;font-weight:500;line-height:1.05;letter-spacing:-.02em;transition:color .15s}
+.bignote.followed{color:var(--brass)}
+.aim{font-family:var(--mono);font-size:12px;color:var(--dim)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+
+/* Measure mode */
+.prompt{text-align:center;font-weight:600;font-size:15px;color:var(--brass);min-height:1.5em}
+.level{height:8px;background:var(--card2);border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.level>i{display:block;height:100%;width:0;background:var(--brass)}
+.level>i.hot{background:var(--bad)}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.actions button{flex:1}
+.closed{margin:auto 0;text-align:center;padding:20px 8px}
+
+/* Tune mode: two readings side by side */
+.reads{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.reads>div{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 10px 6px;text-align:center}
+.live,.held{font-family:var(--mono);font-weight:500;font-size:44px;line-height:1.05;font-variant-numeric:tabular-nums;letter-spacing:-.03em}
+.live{color:var(--faint)} .live.near{color:var(--brass)} .live.on{color:var(--good)} .live.off{color:var(--bad)} .live.stale{opacity:.4}
+.held.waiting{opacity:.35}
+.way{text-align:center;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--dim);min-height:1.4em}
+
+/* One row per partial, each against its own target. */
 .ladder{display:flex;flex-direction:column;gap:5px}
 .rung{display:grid;grid-template-columns:34px 1fr 52px;align-items:center;gap:8px}
 .rung .n{font-family:var(--mono);font-size:11px;color:var(--dim);text-align:right}
 .rung .v{font-family:var(--mono);font-size:12px;text-align:right;font-variant-numeric:tabular-nums;color:var(--dim)}
-.rung.main .n,.rung.main .v{color:var(--brass)}
-.rail{position:relative;height:16px;background:#0a0d11;border:1px solid var(--line);border-radius:8px}
-.rung.main .rail{border-color:var(--brass-soft)}
-.rail .tol{position:absolute;top:0;bottom:0;background:#16261f}
-.rail .zero{position:absolute;top:-3px;bottom:-3px;left:50%;width:1px;background:#3a4351}
+.rung.main .n,.rung.main .v{color:var(--brass);font-weight:600}
+.rail{position:relative;height:16px;background:var(--card2);border:1px solid var(--line);border-radius:8px}
+.rung.main .rail{border-color:var(--brass)}
+.rail .tol{position:absolute;top:0;bottom:0;background:var(--good-bg)}
+.rail .zero{position:absolute;top:-3px;bottom:-3px;left:50%;width:1px;background:var(--line2)}
 .rail .bead{position:absolute;top:2px;width:10px;height:10px;margin-left:-5px;border-radius:50%;background:var(--ink)}
 .rung.main .bead{background:var(--brass)}
-.rung.stale .bead{opacity:.25}
-.rung.stale .v{opacity:.4}
+.rung.stale .bead{opacity:.25} .rung.stale .v{opacity:.4}
 .rail .edge{position:absolute;top:0;font-size:10px;line-height:14px;color:var(--bad)}
-.ladder-scale{display:grid;grid-template-columns:34px 1fr 52px;gap:8px;font-family:var(--mono);font-size:10px;color:var(--dim)}
-.ladder-scale span:nth-child(2){display:flex;justify-content:space-between}
-
-.unison{display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--panel);border:1px solid var(--line);border-radius:4px;font-size:13.5px}
+.scale{display:grid;grid-template-columns:34px 1fr 52px;gap:8px;font-family:var(--mono);font-size:10px;color:var(--dim)}
+.scale span:nth-child(2){display:flex;justify-content:space-between}
+.unison{display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--card);border:1px solid var(--line);border-radius:12px;font-size:14px}
 .unison .k{flex:1;color:var(--dim)}
-.unison .x{font-family:var(--mono);font-variant-numeric:tabular-nums}
-.unison.beating .x{color:var(--brass)}
-.unison.false .x{color:var(--bad)}
+.unison .x{font-family:var(--mono)}
+.unison.beating .x{color:var(--brass)} .unison.false .x{color:var(--bad)}
+.nav{display:grid;grid-template-columns:1fr 1.4fr;gap:10px;margin-top:auto}
+.nav button{height:50px;font-family:var(--mono);font-size:16px}
 
-/* The whole piano as one strip of 88. Too narrow to tap a key on a phone, so
-   it is scrubbed: put a thumb down, slide, lift on the key wanted. */
-.whole{position:relative;touch-action:none;user-select:none;-webkit-user-select:none;cursor:pointer;padding-top:4px}
-.bars{display:flex;gap:1px;height:30px;align-items:flex-end}
-.bars i{flex:1;height:14px;background:#2b323e;border-radius:1px}
-.bars i.done{height:20px;background:var(--good)}
-.bars i.off{height:20px;background:var(--brass-soft)}
-.bars i.now{height:30px;background:var(--brass)}
-.bars i.pick{height:30px;background:var(--ink)}
-.octaves{position:relative;height:14px;font-family:var(--mono);font-size:10px;color:var(--dim)}
-.octaves span{position:absolute;transform:translateX(-50%)}
-.pickname{position:absolute;bottom:100%;transform:translateX(-50%);background:var(--ink);color:var(--ground);font-family:var(--mono);font-size:13px;font-weight:600;padding:2px 7px;border-radius:3px;margin-bottom:2px;pointer-events:none}
-.t-nav{display:grid;grid-template-columns:1fr 1.4fr;gap:10px;margin-top:auto}
-.t-nav button{height:52px;font-size:16px;font-family:var(--mono)}
-.t-opts{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.t-opts select{padding:7px 8px;font-size:13px}
-@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+/* ---------- the keyboard ---------- */
+.keys{background:var(--card);border-top:1px solid var(--line);padding:6px 0 calc(env(safe-area-inset-bottom) + 6px)}
+.kb-scroll{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.kb-scroll::-webkit-scrollbar{display:none}
+.kb{position:relative;height:118px;margin:0 8px}
+.kb button{position:absolute;top:0;padding:0;border-radius:0 0 6px 6px;font-family:var(--mono)}
+.kb .w{height:118px;background:var(--wkey);border:1px solid var(--wkey-edge);z-index:1}
+.kb .b{height:72px;background:var(--bkey);border:1px solid var(--bkey);z-index:2;border-radius:0 0 4px 4px}
+.kb .w .nm{position:absolute;left:0;right:0;bottom:16px;font-size:10px;color:#80858d;text-align:center}
+.kb .mk{position:absolute;left:50%;bottom:5px;width:7px;height:7px;margin-left:-3.5px;border-radius:50%}
+.kb .b .mk{bottom:6px}
+.kb .measured .mk{background:var(--good)}
+.kb .failed .mk{background:var(--bad)}
+.kb .planned .mk{border:1.5px solid var(--brass);background:none}
+.kb .tuned .mk{background:var(--good);width:60%;left:20%;margin-left:0;height:4px;border-radius:2px}
+.kb .off .mk{background:var(--brass)}
+.kb .w.now{background:var(--brass);border-color:var(--brass)}
+.kb .w.now .nm{color:var(--on-brass)}
+.kb .b.now{background:var(--brass);border-color:var(--brass)}
+.kb .now .mk{background:var(--on-brass)!important;border-color:var(--on-brass)!important}
+
+/* The whole keyboard at a glance. Slide a thumb along it to travel. */
+.ov{position:relative;margin:7px 14px 0;height:22px;touch-action:none;user-select:none;-webkit-user-select:none;cursor:pointer}
+.ov .bars{display:flex;gap:1px;height:100%;align-items:flex-end}
+.ov .bars i{flex:1;height:8px;background:var(--line2);border-radius:1px}
+.ov .bars i.measured,.ov .bars i.tuned{height:14px;background:var(--good)}
+.ov .bars i.failed{height:14px;background:var(--bad)}
+.ov .bars i.off{height:14px;background:var(--brass)}
+.ov .bars i.now{height:22px;background:var(--brass)}
+.ov .bars i.pick{height:22px;background:var(--ink)}
+.ov .win{position:absolute;top:-2px;bottom:-2px;border:1.5px solid var(--dim);border-radius:4px;pointer-events:none}
+.pickname{position:absolute;bottom:calc(100% + 4px);transform:translateX(-50%);background:var(--ink);color:var(--bg);font-family:var(--mono);font-size:13px;font-weight:600;padding:2px 7px;border-radius:5px;pointer-events:none;z-index:3}
+
+/* ---------- sheets ---------- */
+.dim{position:fixed;inset:0;background:var(--dimmer);z-index:20;display:flex;align-items:flex-end;justify-content:center}
+.sheet{width:100%;max-width:640px;max-height:88dvh;overflow-y:auto;background:var(--bg);border-radius:16px 16px 0 0;
+  padding:0 16px calc(env(safe-area-inset-bottom) + 20px)}
+.sheet-h{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:8px;background:var(--bg);padding:12px 0 10px;border-bottom:1px solid var(--line);margin-bottom:14px}
+.sheet-h h2{flex:1;margin:0;font-size:17px;font-weight:600}
+.sheet .card+.card{margin-top:12px}
+.banner{background:var(--brass-bg);color:var(--ink);border-radius:12px;padding:10px 12px;font-size:14px}
+.graph-wrap{position:relative;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px}
+canvas{display:block;width:100%;touch-action:none}
+.readout{font-family:var(--mono);font-size:13px;min-height:1.5em;text-align:center;color:var(--ink)}
+table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12.5px;font-variant-numeric:tabular-nums}
+th,td{text-align:right;padding:5px 7px;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+th{font-family:var(--sans);font-size:11px;color:var(--dim);font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+.scroll{overflow-x:auto}
+.seg.small{margin:0 0 12px}
+
+/* Sideways on a phone: a short keyboard, and the stage in two columns so the
+   readings stay on screen beside the partial rows. */
+@media (orientation:landscape) and (max-height:520px){
+  .bar{padding-top:4px;padding-bottom:3px}
+  .seg{margin-top:6px} .seg button{padding:4px}
+  .stage{padding:8px 14px}
+  .stage-in{max-width:none;display:grid;grid-template-columns:1fr 1fr;column-gap:18px;row-gap:8px;align-content:start}
+  #gate,#measureClosed{display:flex}
+  #tune .head,#tune .reads,#tune .way{grid-column:1}
+  #tune>div:nth-child(4),#tune .unison,#tune .nav{grid-column:2}
+  #tune .head{grid-row:1} #tune .reads{grid-row:2} #tune .way{grid-row:3}
+  #tune>div:nth-child(4){grid-row:1 / span 2} #tune .unison{grid-row:3} #tune .nav{grid-row:4;margin-top:0}
+  #measure .head,#measure .prompt,#measure .level{grid-column:1}
+  #measure .card,#measure #measureCount,#measure .actions{grid-column:2}
+  #measure>p.note:not(#measureCount){display:none}
+  #measure .head{grid-row:1} #measure .prompt{grid-row:2} #measure .level{grid-row:3}
+  #measure .card{grid-row:1} #measure #measureCount{grid-row:2} #measure .actions{grid-row:3;margin-top:0}
+  .bignote{font-size:36px} .live,.held{font-size:30px}
+  .ladder{gap:3px} .nav button{height:42px}
+  .kb{height:70px} .kb .w{height:70px} .kb .b{height:42px} .kb .w .nm{bottom:12px}
+  .keys{padding-top:4px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
 </style>
 </head>
 <body>
-<div class="wrap">
 
-<header>
-  <h1>Stiffstring</h1>
-  <p class="sub">Measure a piano, get its tuning.</p>
-</header>
-
-<div class="panel">
-  <div class="phead">
-    <span class="pnum">1</span>
-    <h2 class="ptitle">This piano</h2>
-    <span class="pill" id="p1">describe it</span>
+<!-- =================== home =================== -->
+<section class="screen home" id="home">
+  <div class="home-in">
+    <h1 class="brand">Stiffstring</h1>
+    <p class="brand-sub">Measures each piano, then tunes it to its own targets.</p>
+    <button class="primary" id="btnNewPiano" style="width:100%;height:50px">New piano</button>
+    <div class="section-h">Pianos on this phone</div>
+    <div class="list" id="pianoList"></div>
+    <p class="note" style="margin:14px 4px 0">Everything stays on this phone. Nothing is sent anywhere.</p>
   </div>
-  <div class="pbody">
-    <div class="fields">
-      <div>
-        <label for="pName">Make and model</label>
-        <input type="text" id="pName" placeholder="Kimball spinet" autocomplete="off">
+</section>
+
+<!-- =================== instrument =================== -->
+<section class="screen hidden" id="piano">
+  <div class="bar">
+    <button class="icon" id="btnHome" aria-label="All pianos">
+      <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+    </button>
+    <div class="title"><b id="barName">Piano</b><span id="barSub">&nbsp;</span></div>
+    <button class="pitchbtn" id="btnPitch" aria-label="Reference pitch"><small>A4</small><span id="barA4">—</span></button>
+    <button class="icon" id="btnGraphs" aria-label="Graphs">
+      <svg viewBox="0 0 24 24"><path d="M4 19h16"/><path d="M5 16c3-1 4-6 7-7s4 2 7-4"/></svg>
+    </button>
+    <button class="icon" id="btnSettings" aria-label="Piano and settings">
+      <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg>
+    </button>
+  </div>
+
+  <div class="seg" role="tablist">
+    <button id="modeMeasure" class="on" role="tab">Measure</button>
+    <button id="modeTune" role="tab">Tune</button>
+  </div>
+
+  <div class="stage">
+    <!-- the microphone needs a tap before it can start -->
+    <div class="stage-in hidden" id="gate">
+      <div class="gate">
+        <p class="note" id="gateWhy">The microphone starts when you tap.</p>
+        <button class="primary" id="btnMic">Start listening</button>
+        <p class="err hidden" id="micErr"></p>
       </div>
+    </div>
+
+    <!-- measure -->
+    <div class="stage-in hidden" id="measure">
+      <div class="head">
+        <div class="lbl">Play this note</div>
+        <div class="bignote" id="target">&mdash;</div>
+        <div class="aim" id="targetSub">&nbsp;</div>
+      </div>
+      <p class="prompt" id="prompt">&nbsp;</p>
+      <div class="level"><i id="level"></i></div>
+      <div class="card"><dl class="kv" id="lastResult"><dt>Last note</dt><dd>none yet</dd></dl></div>
+      <p class="note" id="measureCount">&nbsp;</p>
+      <p class="note">Strike each note firmly and let it ring. The app picks the notes; tap a key below
+        to measure a different one instead.</p>
+      <div class="actions" style="margin-top:auto">
+        <button id="btnSkip">Skip</button>
+        <button id="btnRedo" disabled>Redo last</button>
+        <button id="btnFinish" class="primary" disabled>Solve</button>
+      </div>
+    </div>
+    <div class="stage-in hidden" id="measureClosed">
+      <div class="closed stack">
+        <p><b>Measuring is closed.</b></p>
+        <p class="note">Notes have been tuned to these targets already. Measuring more now would move
+          them, and a note already tuned must never move. Start a new piano to measure again.</p>
+      </div>
+    </div>
+
+    <!-- tune -->
+    <div class="stage-in hidden" id="tune">
+      <div class="head">
+        <div class="stagename" id="tuneStage">&nbsp;</div>
+        <div class="bignote" id="tuneNote">&mdash;</div>
+        <div class="aim" id="tuneAim">&nbsp;</div>
+      </div>
+      <div class="reads">
+        <div><div class="lbl">Live</div><div class="live" id="tuneCents">&mdash;</div></div>
+        <div><div class="lbl">Held after strike</div><div class="held waiting" id="tuneHeld">&mdash;</div></div>
+      </div>
+      <div class="way" id="tuneWay">Play the note</div>
       <div>
-        <label for="pType">Type</label>
-        <select id="pType">
-          <option value="spinet">Spinet</option>
-          <option value="console">Console</option>
-          <option value="upright">Upright</option>
-          <option value="studio">Studio upright</option>
-          <option value="baby-grand">Baby grand</option>
-          <option value="grand">Grand</option>
+        <div class="lbl" style="margin-bottom:6px">Partials, each against its own target</div>
+        <div class="ladder" id="ladder"></div>
+        <div class="scale"><span></span><span><span>&minus;10&cent;</span><span>0</span><span>+10&cent;</span></span><span></span></div>
+      </div>
+      <div class="unison" id="unison"><span class="k" id="unisonK">Strings</span><span class="x" id="unisonX">&mdash;</span></div>
+      <div class="nav">
+        <button id="btnBack">&larr;</button>
+        <button class="primary" id="btnDone">Done &rarr;</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="keys">
+    <div class="kb-scroll" id="kbScroll"><div class="kb" id="kb"></div></div>
+    <div class="ov" id="ov" role="slider" tabindex="0" aria-label="Key" aria-valuemin="1" aria-valuemax="88">
+      <div class="bars" id="ovBars"></div>
+      <div class="win" id="ovWin"></div>
+    </div>
+  </div>
+</section>
+
+<!-- =================== sheets =================== -->
+<div class="dim hidden" id="dim">
+
+  <div class="sheet hidden" id="sheetNew">
+    <div class="sheet-h"><button class="plain" data-close>Cancel</button><h2>New piano</h2></div>
+    <div class="stack">
+      <div><label for="nName">Make and model</label><input type="text" id="nName" placeholder="Kimball spinet" autocomplete="off"></div>
+      <div><label for="nType">Type</label>
+        <select id="nType">
+          <option value="spinet">Spinet</option><option value="console">Console</option>
+          <option value="upright">Upright</option><option value="studio">Studio upright</option>
+          <option value="baby-grand">Baby grand</option><option value="grand">Grand</option>
           <option value="unknown">Not sure</option>
-        </select>
+        </select></div>
+      <div><label for="nNotes">Condition notes</label><input type="text" id="nNotes" placeholder="rusty bass, tenor won't hold" autocomplete="off"></div>
+      <div class="fields">
+        <div><label for="nSingle">Single strings up to key</label><input type="number" id="nSingle" value="8" min="0" max="30"></div>
+        <div><label for="nDouble">Two strings up to key</label><input type="number" id="nDouble" value="16" min="0" max="40"></div>
       </div>
-    </div>
-    <div>
-      <label for="pNotes">Condition notes</label>
-      <input type="text" id="pNotes" placeholder="rusty bass, tenor won't hold" autocomplete="off">
-    </div>
-    <div class="fields">
-      <div>
-        <label for="pSingle">Single strings up to key</label>
-        <input type="number" id="pSingle" value="8" min="0" max="30">
-      </div>
-      <div>
-        <label for="pDouble">Two strings up to key</label>
-        <input type="number" id="pDouble" value="16" min="0" max="40">
-      </div>
-    </div>
-    <p class="note">The string counts decide whether a beating note is a unison to tune or a false
-      beat that tuning cannot cure. Defaults are a guess &mdash; correct them and it stays with
-      this piano.</p>
-    <div class="row">
-      <button class="primary" id="btnStart">Start measuring</button>
-      <button id="btnNew" class="hidden">New piano</button>
-    </div>
-    <p class="err hidden" id="startErr"></p>
-    <div id="savedWrap" class="hidden">
-      <label>Saved pianos</label>
-      <div class="saved" id="savedList"></div>
+      <p class="note">The string counts decide whether a beating note is a unison to tune or a false
+        beat that tuning cannot cure. Defaults are a guess &mdash; correct them and they stay with this piano.</p>
+      <button class="primary" id="btnBegin" style="width:100%;height:50px">Start measuring</button>
     </div>
   </div>
-</div>
 
-<div class="panel">
-  <div class="phead">
-    <span class="pnum">2</span>
-    <h2 class="ptitle">Measure</h2>
-    <span class="pill" id="p2">waiting</span>
-  </div>
-  <div class="pbody">
-    <div class="stage">
-      <span class="lbl">Play this note</span>
-      <div class="name" id="target">&mdash;</div>
-      <div class="sub" id="targetSub">&nbsp;</div>
+  <div class="sheet hidden" id="sheetPitch">
+    <div class="sheet-h"><h2>Pitch and stretch</h2><button class="plain" data-close>Done</button></div>
+    <div class="stack">
+      <div class="banner hidden" id="pitchBanner"></div>
+      <div class="card stack">
+        <div><label for="a4">Reference pitch, A4</label><select id="a4"></select></div>
+        <p class="note" id="pitchWhy">&nbsp;</p>
+        <div><label for="stretch">Stretch</label>
+          <select id="stretch">
+            <option value="0.85">Gentler</option><option value="1" selected>As measured</option><option value="1.15">Wider</option>
+          </select></div>
+        <p class="note hidden" id="pitchLocked">Locked: notes have been tuned to these settings, and a note already tuned must never move.</p>
+      </div>
+      <div class="card"><dl class="kv" id="curveInfo"></dl></div>
+      <button class="primary hidden" id="btnStartTuning" style="width:100%;height:50px">Start tuning</button>
     </div>
-    <p class="prompt" id="prompt">Start the microphone first</p>
-    <div class="bar"><i id="level"></i></div>
-    <dl class="kv" id="lastResult"></dl>
-    <div class="row">
-      <button id="btnSkip" disabled>Skip</button>
-      <button id="btnRedo" disabled>Redo last</button>
-      <button id="btnFinish" disabled>Finish and solve</button>
-    </div>
-    <div class="strip" id="strip"></div>
   </div>
-</div>
 
-<div class="panel hidden" id="curvePanel">
-  <div class="phead">
-    <span class="pnum">3</span>
-    <h2 class="ptitle">Tuning</h2>
-    <span class="pill" id="p3">not solved</span>
-  </div>
-  <div class="pbody">
-    <div class="fields">
-      <div>
-        <label for="a4">Reference pitch, A4</label>
-        <select id="a4"></select>
-      </div>
-      <div>
-        <label for="stretch">Stretch</label>
-        <select id="stretch">
-          <option value="0.85">Gentler</option>
-          <option value="1" selected>As measured</option>
-          <option value="1.15">Wider</option>
-        </select>
-      </div>
+  <div class="sheet hidden" id="sheetGraphs">
+    <div class="sheet-h"><h2>This piano</h2><button class="plain" data-close>Done</button></div>
+    <div class="seg small" role="tablist">
+      <button data-graph="b" class="on">Stiffness</button>
+      <button data-graph="curve">Tuning curve</button>
+      <button data-graph="table">Targets</button>
     </div>
-    <p class="note" id="pitchWhy">&nbsp;</p>
-    <dl class="kv" id="curveInfo"></dl>
-    <canvas id="chart" width="720" height="220"></canvas>
-    <p class="note">Cents from equal temperament, A0 on the left to C8 on the right. Dots are the
-      notes actually measured.</p>
-    <div class="row">
-      <button class="primary" id="btnSave">Save this piano</button>
-      <button id="btnExport">Export</button>
-      <span class="note" id="saveNote"></span>
+    <div id="graphPane" class="stack">
+      <div class="graph-wrap"><canvas id="graph" height="240"></canvas></div>
+      <p class="readout" id="graphRead">Touch the graph to read a note</p>
+      <p class="note" id="graphNote"></p>
     </div>
-    <div class="scroll"><table id="targets"><thead><tr>
+    <div id="tablePane" class="scroll hidden"><table id="targets"><thead><tr>
       <th>Key</th><th>Note</th><th>Target Hz</th><th>Stretch</th><th>B</th>
     </tr></thead><tbody></tbody></table></div>
   </div>
-</div>
 
-<div class="panel hidden" id="tunePanel">
-  <div class="phead">
-    <span class="pnum">4</span>
-    <h2 class="ptitle">Tune</h2>
-    <span class="pill" id="p4">not started</span>
-  </div>
-  <div class="pbody">
-    <p class="note">Temperament first, F3 up to F4. Then on up the treble to C8, then back to E3
-      and down through the bass &mdash; always the next key along, never a jump. Both hands stay at
-      the piano: strike, set the pin, and it moves on by itself when the note holds inside
-      tolerance.</p>
-    <div class="row">
-      <button class="primary" id="btnTune">Start tuning</button>
+  <div class="sheet hidden" id="sheetSettings">
+    <div class="sheet-h"><h2>Piano and settings</h2><button class="plain" data-close>Done</button></div>
+    <div class="stack">
+      <div class="card stack">
+        <div><label for="sName">Make and model</label><input type="text" id="sName" autocomplete="off"></div>
+        <div><label for="sNotes">Condition notes</label><input type="text" id="sNotes" autocomplete="off"></div>
+        <div class="fields">
+          <div><label for="sSingle">Single strings up to key</label><input type="number" id="sSingle" min="0" max="30"></div>
+          <div><label for="sDouble">Two strings up to key</label><input type="number" id="sDouble" min="0" max="40"></div>
+        </div>
+      </div>
+      <div class="card stack">
+        <div><label for="follow">Follow the key I play</label>
+          <select id="follow"><option value="1" selected>On &mdash; strike a key and it switches to it</option><option value="0">Off &mdash; I choose the key</option></select></div>
+        <p class="note">Following switches only when it is sure which key was struck. A string more
+          than about half a semitone out can sound like its neighbour, so if the screen does not
+          switch, tap the key. Turn it off for a pitch raise.</p>
+        <div class="fields">
+          <div><label for="tol">Close enough</label>
+            <select id="tol"><option value="0.5">Within 0.5&cent;</option><option value="1" selected>Within 1&cent;</option><option value="2">Within 2&cent;</option></select></div>
+          <div><label for="advance">When a note holds</label>
+            <select id="advance"><option value="1" selected>Mark it tuned</option><option value="0">Wait for me</option></select></div>
+        </div>
+        <p class="note" id="advanceWhy">&nbsp;</p>
+        <p class="note">Temperament first, F3 up to F4. Then on up the treble to C8, then back to E3
+          and down through the bass &mdash; always the next key along, never a jump.</p>
+      </div>
+      <div class="actions"><button id="btnExport">Export this piano</button></div>
+      <p class="note" id="saveNote">Saved on this phone automatically.</p>
     </div>
   </div>
 </div>
 
-</div>
-
-<div class="tuner hidden" id="tuner" role="dialog" aria-label="Tuning">
- <div class="tuner-in">
-  <div class="t-top">
-    <button id="btnStop">&lsaquo; Stop</button>
-    <span class="t-piano" id="tPiano"></span>
-    <span class="t-count" id="tCount"></span>
-  </div>
-
-  <div class="t-head">
-    <div class="t-stage" id="tuneStage">&nbsp;</div>
-    <div class="t-name" id="tuneNote">&mdash;</div>
-    <div class="t-aim" id="tuneAim">&nbsp;</div>
-  </div>
-
-  <div class="t-read">
-    <div>
-      <div class="t-lbl">Live</div>
-      <div class="t-live" id="tuneCents">&mdash;</div>
-    </div>
-    <div>
-      <div class="t-lbl">Held after strike</div>
-      <div class="t-held waiting" id="tuneHeld">&mdash;</div>
-    </div>
-  </div>
-  <div class="t-way" id="tuneWay">Play the note</div>
-
-  <div>
-    <div class="t-lbl" style="margin-bottom:6px">Partials, each against its own target</div>
-    <div class="ladder" id="ladder"></div>
-    <div class="ladder-scale"><span></span><span><span>&minus;10&cent;</span><span>0</span><span>+10&cent;</span></span><span></span></div>
-  </div>
-
-  <div class="unison" id="unison"><span class="k" id="unisonK">Strings</span><span class="x" id="unisonX">&mdash;</span></div>
-
-  <div>
-    <div class="t-lbl" style="display:flex;justify-content:space-between;margin-bottom:2px">
-      <span>The whole piano</span><span>slide to choose a key</span>
-    </div>
-    <div class="whole" id="whole" role="slider" tabindex="0" aria-label="Key" aria-valuemin="1" aria-valuemax="88">
-      <div class="bars" id="bars"></div>
-      <div class="octaves" id="octaves"></div>
-    </div>
-  </div>
-
-  <div class="t-nav">
-    <button id="btnBack">&larr;</button>
-    <button class="primary" id="btnDone">Done &rarr;</button>
-  </div>
-
-  <div class="t-opts">
-    <div>
-      <label for="tol">Close enough</label>
-      <select id="tol">
-        <option value="0.5">Within 0.5&cent;</option>
-        <option value="1" selected>Within 1&cent;</option>
-        <option value="2">Within 2&cent;</option>
-      </select>
-    </div>
-    <div>
-      <label for="advance">When a note holds</label>
-      <select id="advance">
-        <option value="1" selected>Move on by itself</option>
-        <option value="0">Wait for me</option>
-      </select>
-    </div>
-  </div>
- </div>
-</div>
 <script src="../wasm/stiffstring.js"></script>
 <script>
 "use strict";
 const $ = s => document.querySelector(s);
 const NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
 const keyName = k => { const m = k + 20; return NAMES[m % 12] + (Math.floor(m / 12) - 1); };
+const isBlack = k => keyName(k).includes("#");
 
 const CAPTURE_SECONDS = 3.2;
 const PREROLL_SECONDS = 0.15;
@@ -404,7 +450,7 @@ const METER_SECONDS = 0.5;
 const METER_MIN_MS = 70;
 const METER_HISTORY = 8;    // readings the display holds a median over
 const METER_LOST_MS = 700;  // silence this long and the lock is let go
-const METER_STALE_MS = 350; // no fresh reading: dim the needle, do not blank it
+const METER_STALE_MS = 350; // no fresh reading: dim the number, do not blank it
 const SETTLE_MS = 1200;     // how long a note must hold before it counts as done
 
 /* The partial rows. Each tick reads the followed partial and one other, in
@@ -413,6 +459,7 @@ const LADDER_ROWS = 5;
 const LADDER_CENTS = 10;      // either side of zero on a row
 const LADDER_STALE_MS = 1600; // a row not refreshed this long is dimmed
 const LADDER_HISTORY = 3;     // readings a row takes the median of
+const RUNG_DISAGREE_CENTS = 25;
 
 /* Held after strike. The pitch the ear judges is the one just after the
    hammer, before the string settles flat as it decays. A strike is the followed
@@ -424,6 +471,17 @@ const LADDER_HISTORY = 3;     // readings a row takes the median of
 const STRIKE_RISE = 2.5;
 const HELD_FROM_S = 0.55;
 const HELD_TO_S = 1.3;
+
+/* Following the key played. A blow is a jump in level over the last moment's
+   level — not over the long-term floor, which a room full of ringing strings
+   pushes up — and the engine is then asked which key it was once a third of a
+   second of audio after it has arrived. The engine decides; this only says
+   when to ask. */
+const FOLLOW_RISE_DB = 8;
+const FOLLOW_REARM_MS = 350;
+const FOLLOW_SECONDS = 0.34;
+const FOLLOW_KEY = "stiffstring.follow";
+
 /* How far a piano may sit from standard and still be worth pulling all the way
    up in one tuning. Beyond this it drops back before the next visit and a pitch
    raise is the honest answer, so the targets are left where the piano is. */
@@ -436,25 +494,26 @@ const EASY_PULL_CENTS = 15;
 const TEMPERAMENT_LOW = 33;   // F3
 const TEMPERAMENT_HIGH = 45;  // F4
 
+/* The keyboard, drawn to scale: 52 white keys at this width scroll sideways. */
+const WHITE_W = 36;
+const BLACK_W = 22;
+
 const S = {
   engine:null, ac:null, stream:null, node:null, settings:null,
   sampleRate:0, running:false,
   ring:null, ringLen:0, ringPos:0,
   armed:false, armedAt:0, capturing:false, capturedAt:0, capturedNeeded:0, captureStart:0,
   floorDb:-90, peakHold:0,
+  piano:null, mode:"measure", solvedOnce:false,
   plan:[], index:0, results:new Map(), attempts:new Map(), lastKey:null,
-  secondPass:false, curve:null, pianoId:null,
+  secondPass:false, curve:null,
   tuning:false, tuneKey:TEMPERAMENT_LOW, order:[], tuned:new Set(),
   lock:null, readings:[], lastReadingAt:0, insideSince:0, meterTimer:0,
   rungs:[], rungTurn:0, ladder:new Map(), amps:[], strike:null, held:null, seen:new Map(),
-  scrubbing:false,
+  graph:"b", graphKey:null, scrubbing:false,
+  recentDb:-90, followAt:0, followPending:null, followFrame:0,
 };
 
-const setPill = (sel, text, cls) => {
-  const el = $(sel);
-  el.textContent = text;
-  el.className = "pill" + (cls ? " " + cls : "");
-};
 const dbfs = a => a > 0 ? 20 * Math.log10(a) : -Infinity;
 const cents = (from, to) => 1200 * Math.log2(to / from);
 const signed = (x, d) => {
@@ -463,6 +522,9 @@ const signed = (x, d) => {
   return (Number(s) === 0 ? "" : x >= 0 ? "+" : "−") + s;
 };
 const median = xs => { if (!xs.length) return NaN; const s = [...xs].sort((a,b)=>a-b); return s[s.length>>1]; };
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const sci = b => { const e = Math.floor(Math.log10(b)); return (b / Math.pow(10, e)).toFixed(2) + "×10" + supers(e); };
+const supers = n => String(n).split("").map(c => "⁰¹²³⁴⁵⁶⁷⁸⁹"["0123456789".indexOf(c)] || (c === "-" ? "⁻" : c)).join("");
 
 function kv(el, rows){
   el.innerHTML = "";
@@ -474,7 +536,24 @@ function kv(el, rows){
   }
 }
 
-/* ---------------- capture ---------------- */
+/* ======================= screens and sheets ======================= */
+function showScreen(id){
+  $("#home").classList.toggle("hidden", id !== "home");
+  $("#piano").classList.toggle("hidden", id !== "piano");
+}
+
+function openSheet(id){
+  for (const s of document.querySelectorAll(".sheet")) s.classList.toggle("hidden", s.id !== id);
+  $("#dim").classList.remove("hidden");
+  if (id === "sheetGraphs") requestAnimationFrame(drawGraph);
+  if (id === "sheetSettings") fillSettings();
+}
+function closeSheet(){
+  $("#dim").classList.add("hidden");
+  for (const s of document.querySelectorAll(".sheet")) s.classList.add("hidden");
+}
+
+/* ======================= microphone ======================= */
 const WORKLET = `
 class Tap extends AudioWorkletProcessor {
   constructor() { super(); this.buf = new Float32Array(1024); this.n = 0; }
@@ -492,33 +571,35 @@ class Tap extends AudioWorkletProcessor {
 registerProcessor('tap', Tap);
 `;
 
-async function start(){
-  $("#btnStart").disabled = true;
-  setPill("#p1", "starting", "busy");
-  $("#startErr").classList.add("hidden");
+async function ensureEngine(){
+  if (!S.engine) S.engine = await Stiffstring.load("../wasm/stiffstring.wasm");
+  return S.engine;
+}
 
+async function startMic(){
+  const err = $("#micErr");
+  err.classList.add("hidden");
+  $("#btnMic").disabled = true;
   try {
-    if (!S.engine) S.engine = await Stiffstring.load("../wasm/stiffstring.wasm");
+    await ensureEngine();
   } catch(e){
-    return fail("Could not load the engine — " + (e.message || e));
+    return micFail("Could not load the engine — " + (e.message || e));
   }
-
   try {
     S.stream = await navigator.mediaDevices.getUserMedia({
       audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:false, channelCount:1 },
       video:false
     });
   } catch(e){
-    return fail("Microphone refused — " + e.name + ": " + e.message);
+    return micFail("Microphone refused — " + e.name + ": " + e.message);
   }
-
   try { S.settings = S.stream.getAudioTracks()[0].getSettings(); } catch(e){ S.settings = null; }
 
   const AC = window.AudioContext || window.webkitAudioContext;
   S.ac = new AC();
   if (S.ac.state === "suspended") { try { await S.ac.resume(); } catch(e){} }
   S.sampleRate = S.ac.sampleRate;
-  if (!S.ac.audioWorklet) return fail("This browser cannot capture raw audio reliably.");
+  if (!S.ac.audioWorklet) return micFail("This browser cannot capture raw audio reliably.");
 
   const url = URL.createObjectURL(new Blob([WORKLET], { type:"application/javascript" }));
   await S.ac.audioWorklet.addModule(url);
@@ -539,31 +620,33 @@ async function start(){
   S.running = true;
   S.armed = true;
   S.armedAt = performance.now();
-
-  // Anchors first; the engine asks for more once it has seen these.
-  S.plan = S.engine.anchorKeys().map(k => Math.round(k));
-  S.index = 0;
-  S.results.clear();
-  S.attempts.clear();
-  S.secondPass = false;
-
-  setPill("#p1", "measuring", "good");
-  setPill("#p2", "listening", "good");
-  $("#btnSkip").disabled = false;
-  $("#btnNew").classList.remove("hidden");
-  try { if ("wakeLock" in navigator) await navigator.wakeLock.request("screen"); } catch(e){}
-
-  renderStrip(); showTarget();
+  $("#btnMic").disabled = false;
+  keepAwake();
   requestAnimationFrame(tick);
+  return true;
 }
 
-function fail(message){
-  setPill("#p1", "failed", "bad");
-  $("#btnStart").disabled = false;
-  const err = $("#startErr");
+function micFail(message){
+  $("#btnMic").disabled = false;
+  const err = $("#micErr");
   err.classList.remove("hidden");
   err.textContent = message;
+  return false;
 }
+
+/* Let the microphone go when leaving a piano, so the phone stops showing it in use. */
+function stopMic(){
+  S.running = false;
+  try { if (S.stream) S.stream.getTracks().forEach(t => t.stop()); } catch(e){}
+  try { if (S.ac) S.ac.close(); } catch(e){}
+  S.stream = null; S.ac = null; S.node = null;
+}
+
+let wakeLock = null;
+async function keepAwake(){
+  try { if ("wakeLock" in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request("screen"); wakeLock.addEventListener("release", () => { wakeLock = null; }); } } catch(e){}
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && S.running) keepAwake(); });
 
 function onSamples(block){
   for (let i = 0; i < block.length; i++){
@@ -582,8 +665,10 @@ function onSamples(block){
   if (Number.isFinite(rms)) S.floorDb = rms < S.floorDb ? rms : S.floorDb + (rms - S.floorDb) * 0.002;
 
   // While tuning, the meter pulls what it needs out of the ring on its own
-  // clock. Onset capture would only fight it.
-  if (S.tuning) return;
+  // clock. Onset capture would only fight it; the only thing listened for is a
+  // blow, to ask which key it was.
+  if (S.tuning){ if (following()) watchForBlow(rms, block.length); return; }
+  if (S.mode !== "measure" || measuringClosed()) return;
 
   if (S.capturing){
     S.capturedNeeded -= block.length;
@@ -596,13 +681,217 @@ function onSamples(block){
 
   if (rms > S.floorDb + ONSET_RISE_DB && rms > ONSET_FLOOR_DB){
     S.capturing = true;
+    S.captureKey = S.plan[S.index];
     S.capturedNeeded = Math.ceil(S.sampleRate * CAPTURE_SECONDS);
     S.captureStart = (S.ringPos - Math.ceil(S.sampleRate * PREROLL_SECONDS) - block.length + S.ringLen * 2) % S.ringLen;
     $("#prompt").textContent = "Listening — let it ring";
-    setPill("#p2", "recording", "busy");
   }
 }
 
+function tick(){
+  if (!S.running) return;
+  requestAnimationFrame(tick);
+  const bar = $("#level");
+  bar.style.width = Math.min(100, S.peakHold * 100) + "%";
+  bar.classList.toggle("hot", S.peakHold >= 0.999);
+  S.peakHold *= 0.97;
+}
+
+/* ======================= pianos ======================= */
+const loadStore = () => { try { return JSON.parse(localStorage.getItem(STORE_KEY)) || []; } catch(e){ return []; } };
+const saveStore = list => { try { localStorage.setItem(STORE_KEY, JSON.stringify(list)); return true; } catch(e){ return false; } };
+
+function renderPianoList(){
+  const list = loadStore();
+  const box = $("#pianoList");
+  box.innerHTML = "";
+  if (!list.length){
+    box.innerHTML = '<div class="empty">No pianos yet. Tap New piano to measure one.</div>';
+    return;
+  }
+  for (const p of list){
+    const b = document.createElement("button");
+    const tuned = (p.tuned || []).length;
+    const t = document.createElement("span"); t.className = "t";
+    const name = document.createElement("b"); name.textContent = p.name;
+    const sub = document.createElement("span");
+    sub.textContent = p.samples.length + " notes measured"
+      + (tuned ? " · " + tuned + " of 88 tuned" : "") + " · " + p.savedAt.slice(0, 10);
+    t.append(name, sub);
+    const chev = document.createElement("span"); chev.className = "chev"; chev.textContent = "›";
+    b.append(t, chev);
+    b.addEventListener("click", () => openPiano(p));
+    box.appendChild(b);
+  }
+}
+
+function resetPianoState(){
+  stopTuningMeter();
+  S.plan = []; S.index = 0; S.results = new Map(); S.attempts = new Map(); S.lastKey = null;
+  S.secondPass = false; S.curve = null; S.solvedOnce = false;
+  S.tuned = new Set(); S.seen = new Map(); S.order = tuningOrder(); S.tuneKey = TEMPERAMENT_LOW;
+  S.graphKey = null;
+  $("#a4").innerHTML = ""; $("#a4").disabled = false; $("#stretch").disabled = false; $("#stretch").value = "1";
+  kv($("#lastResult"), [["Last note", "none yet"]]);
+  $("#btnRedo").disabled = true;
+}
+
+async function beginNewPiano(){
+  S.piano = {
+    id: "p" + Date.now(),
+    name: $("#nName").value.trim() || "Unnamed piano",
+    type: $("#nType").value,
+    notes: $("#nNotes").value.trim(),
+    single: Number($("#nSingle").value) || 0,
+    double: Number($("#nDouble").value) || 0,
+  };
+  resetPianoState();
+  closeSheet();
+  showScreen("piano");
+  S.mode = "measure";
+  try { await ensureEngine(); } catch(e){ /* reported by startMic */ }
+  if (S.engine) S.plan = S.engine.anchorKeys().map(k => Math.round(k));
+  savePiano();
+  refresh();
+  // Straight on to listening: the tap on Start measuring is the gesture the
+  // microphone needs.
+  await startMic();
+  refresh();
+}
+
+async function openPiano(p){
+  S.piano = {
+    id: p.id, name: p.name, type: p.type, notes: p.notes || "",
+    single: p.stringing ? p.stringing.single : 8, double: p.stringing ? p.stringing.double : 16,
+  };
+  resetPianoState();
+  for (const s of p.samples){
+    S.results.set(s.key, {
+      key:s.key, ok:true, f0:s.f0, b:s.b, weight:s.weight,
+      offsetCents: 0, rmsCents: 0, beat: null, concerns: [], partials: 0,
+    });
+  }
+  S.tuned = new Set(p.tuned || []);
+  S.plan = p.samples.map(s => s.key);
+  S.index = S.plan.length;
+  S.secondPass = true;
+  showScreen("piano");
+  try { await ensureEngine(); } catch(e){ micFail("Could not load the engine — " + (e.message || e)); }
+  if (S.engine && usableSamples().length >= 4){
+    buildPitchOptions(p.a4);
+    $("#stretch").value = String(p.stretch || 1);
+    S.solvedOnce = true;
+    solve();
+    S.mode = "tune";
+  } else {
+    S.mode = "measure";
+  }
+  refresh();
+}
+
+function pianoRecord(){
+  return {
+    id: S.piano.id,
+    name: S.piano.name,
+    type: S.piano.type,
+    notes: S.piano.notes,
+    stringing: { single: S.piano.single, double: S.piano.double },
+    a4: Number($("#a4").value) || 440,
+    stretch: Number($("#stretch").value),
+    samples: usableSamples(),
+    tuned: [...S.tuned],
+    savedAt: new Date().toISOString(),
+  };
+}
+
+/* Saved after every note measured and every note tuned, so nothing is lost if
+   the phone locks or the page is closed halfway through a job. */
+function savePiano(){
+  if (!S.piano) return;
+  const rec = pianoRecord();
+  const list = loadStore().filter(p => p.id !== rec.id);
+  list.unshift(rec);
+  const ok = saveStore(list);
+  $("#saveNote").textContent = ok
+    ? "Saved on this phone automatically · " + new Date().toLocaleTimeString()
+    : "Could not save on this phone — export it instead.";
+}
+
+function exportPiano(){
+  const rec = pianoRecord();
+  if (S.curve) rec.curve = { a4: rec.a4, cents: S.curve.cents, hz: S.curve.hz, b: S.curve.b };
+  const blob = new Blob([JSON.stringify(rec, null, 2)], { type:"application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = (rec.name.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "piano") + ".json";
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+}
+
+function fillSettings(){
+  $("#sName").value = S.piano.name;
+  $("#sNotes").value = S.piano.notes;
+  $("#sSingle").value = S.piano.single;
+  $("#sDouble").value = S.piano.double;
+}
+
+function goHome(){
+  stopTuningMeter();
+  stopMic();
+  savePiano();
+  closeSheet();
+  S.piano = null;
+  renderPianoList();
+  showScreen("home");
+}
+
+/* ======================= what the screen shows ======================= */
+const measuringClosed = () => S.tuned.size > 0;
+
+function refresh(){
+  if (!S.piano) return;
+  $("#barName").textContent = S.piano.name;
+  const a4 = Number($("#a4").value);
+  $("#barA4").textContent = S.curve && a4 ? a4.toFixed(1) : "—";
+  const n = usableSamples().length, notes = n + (n === 1 ? " note" : " notes");
+  $("#barSub").textContent = S.curve
+    ? (S.tuned.size ? S.tuned.size + " of 88 tuned" : notes + " measured · ready to tune")
+    : notes + " measured";
+
+  $("#modeMeasure").classList.toggle("on", S.mode === "measure");
+  $("#modeTune").classList.toggle("on", S.mode === "tune");
+  $("#modeTune").disabled = !S.curve;
+
+  const needMic = !S.running && !(S.mode === "measure" && measuringClosed());
+  $("#gate").classList.toggle("hidden", !needMic);
+  $("#gateWhy").textContent = S.mode === "tune"
+    ? "Tap to start the microphone and tune."
+    : "Tap to start the microphone and measure.";
+  $("#measure").classList.toggle("hidden", needMic || S.mode !== "measure" || measuringClosed());
+  $("#measureClosed").classList.toggle("hidden", S.mode !== "measure" || !measuringClosed());
+  $("#tune").classList.toggle("hidden", needMic || S.mode !== "tune");
+
+  if (S.mode === "measure") showTarget();
+  if (S.mode === "tune" && S.running && !S.tuning) startTuning();
+  renderKeyboard();
+}
+
+function setMode(m){
+  if (m === S.mode) return;
+  if (m === "tune" && !S.curve) return;
+  if (m === "measure") stopTuningMeter();
+  S.mode = m;
+  refresh();
+  centerOn(currentKey(), true);
+}
+
+/* The key the screen is about: the next to measure, or the one being tuned. */
+function currentKey(){
+  if (S.mode === "tune") return S.tuneKey;
+  return S.index < S.plan.length ? S.plan[S.index] : null;
+}
+
+/* ======================= measuring ======================= */
 function grabCapture(){
   const total = Math.ceil(S.sampleRate * (CAPTURE_SECONDS + PREROLL_SECONDS));
   const out = new Float32Array(total);
@@ -617,9 +906,16 @@ function hintFor(key){
   return S.engine.keyNominalHz(key, 440) * Math.pow(2, shift / 1200);
 }
 
+/* Whether a capture still belongs to the note on screen. Solve, Skip or a tapped
+   key can all move the screen on while a capture or its measurement is under
+   way; filed anyway, it would land on whichever note happened to be next. */
+const captureStillWanted = key => key !== undefined && S.index < S.plan.length && S.plan[S.index] === key
+  && S.mode === "measure" && !measuringClosed();
+
 function finishCapture(){
   S.capturedAt = performance.now();
-  const key = S.plan[S.index];
+  const key = S.captureKey;
+  if (!captureStillWanted(key)) return;
   const audio = grabCapture();
   S.peakHold = 0;
 
@@ -633,15 +929,13 @@ function finishCapture(){
   }
   if (dbfs(peak) < STRIKE_PEAK_DBFS){
     $("#prompt").textContent = "Nothing heard — play it firmly";
-    setPill("#p2", "listening", "good");
     return;
   }
 
-  setPill("#p2", "measuring", "busy");
   $("#prompt").textContent = "Measuring";
-
   // Yield first so the screen repaints before the engine takes the thread.
   setTimeout(() => {
+    if (!captureStillWanted(key)) return;
     const m = S.engine.measureNote(audio, S.sampleRate, hintFor(key));
     // Re-arm from the moment we are listening again, not from before a
     // measurement that holds the thread for a few hundred milliseconds.
@@ -681,15 +975,16 @@ function recordResult(key, m){
   };
   S.results.set(key, r);
 
-  const single = key <= Number($("#pSingle").value || 0);
+  const single = key <= S.piano.single;
   const beatText = r.beat === null ? "none heard"
     : r.beat.toFixed(2) + "¢ " + (single ? "false beat" : "unison");
   kv($("#lastResult"), [
-    [keyName(key), r.f0.toFixed(2) + " Hz, " + r.offsetCents.toFixed(1) + "¢ from 440", "good"],
-    ["Inharmonicity", r.b.toExponential(2) + "  from " + r.partials + " partials"],
+    [keyName(key), r.f0.toFixed(2) + " Hz, " + signed(r.offsetCents) + "¢ from 440", "good"],
+    ["Stiffness", r.b.toExponential(2) + " from " + r.partials + " partials"],
     ["Beating", beatText, r.beat === null ? null : "warn"],
-    ["Fit", r.rmsCents.toFixed(2) + "¢" + (r.concerns.length ? "  — " + r.concerns.join(", ") : "")],
+    ["Fit", r.rmsCents.toFixed(2) + "¢" + (r.concerns.length ? " — " + r.concerns.join(", ") : "")],
   ]);
+  savePiano();
   return true;
 }
 
@@ -699,11 +994,9 @@ function usableSamples(){
 }
 
 function advance(){
-  renderStrip();
-  $("#btnRedo").disabled = false;
-  $("#btnFinish").disabled = usableSamples().length < 4;
+  $("#btnRedo").disabled = S.lastKey === null;
 
-  if (S.index < S.plan.length){ showTarget(); setPill("#p2", "listening", "good"); return; }
+  if (S.index < S.plan.length){ refresh(); centerOn(currentKey(), true); return; }
 
   // Anchors done: let the engine ask for whatever would help most, then go back
   // for anything it could not measure, this time lending it a stiffness.
@@ -714,15 +1007,15 @@ function advance(){
       if (!next || S.results.has(next) || S.plan.includes(next)) break;
       S.plan.push(next);
     }
-    if (S.index < S.plan.length){ renderStrip(); showTarget(); setPill("#p2", "listening", "good"); return; }
+    if (S.index < S.plan.length){ refresh(); centerOn(currentKey(), true); return; }
     S.secondPass = true;
     const failed = [...S.results.values()].filter(r => !r.ok).map(r => r.key);
     if (failed.length){
       S.plan.push(...failed);
       failed.forEach(k => { S.results.delete(k); S.attempts.delete(k); });
-      renderStrip(); showTarget();
-      setPill("#p2", "retrying", "busy");
+      refresh();
       $("#prompt").textContent = "These need another try";
+      centerOn(currentKey(), true);
       return;
     }
   }
@@ -730,58 +1023,48 @@ function advance(){
 }
 
 function showTarget(){
+  const done = usableSamples().length;
+  $("#btnFinish").disabled = done < 4;
+  $("#btnSkip").disabled = S.index >= S.plan.length;
+  const left = Math.max(0, S.plan.length - S.index);
+  $("#measureCount").textContent = done + (done === 1 ? " note" : " notes") + " measured"
+    + (left ? " · " + left + " still to play" : "");
   if (S.index >= S.plan.length){
-    $("#target").textContent = "done";
-    $("#targetSub").textContent = usableSamples().length + " notes measured";
-    $("#prompt").textContent = "";
+    $("#target").textContent = S.curve ? "✓" : "done";
+    $("#targetSub").textContent = S.curve
+      ? "Solved from " + done + " notes. Tap a key to add another."
+      : done + " notes measured";
+    $("#prompt").innerHTML = "&nbsp;";
     return;
   }
   const key = S.plan[S.index];
   $("#target").textContent = keyName(key);
   $("#targetSub").textContent = "key " + key + " · about " + hintFor(key).toFixed(1) + " Hz";
-  $("#prompt").textContent = !S.running ? "Start the microphone first"
-    : S.attempts.get(key) ? "Play " + keyName(key) + " again"
-    : "Waiting for the strike";
+  if (!S.capturing)
+    $("#prompt").textContent = S.attempts.get(key) ? "Play " + keyName(key) + " again" : "Waiting for the strike";
 }
 
-function renderStrip(){
-  const strip = $("#strip");
-  strip.innerHTML = "";
-  S.plan.forEach((key, i) => {
-    const el = document.createElement("span");
-    el.textContent = keyName(key);
-    const r = S.results.get(key);
-    if (i === S.index) el.className = "now";
-    else if (r && r.ok) el.className = r.concerns.length ? "warn" : "done";
-    else if (r) el.className = "failed";
-    strip.appendChild(el);
-  });
+/* A key tapped while measuring becomes the next one to play. Already measured,
+   it is measured again; the old reading goes. */
+function measureKey(key){
+  if (measuringClosed()) return;
+  const later = S.plan.indexOf(key, S.index);
+  if (later >= 0) S.plan.splice(later, 1);
+  if (S.results.has(key)) S.results.delete(key);
+  S.attempts.delete(key);
+  S.plan.splice(S.index, 0, key);
+  S.capturing = false;
+  S.capturedAt = performance.now();
+  refresh();
 }
 
-function tick(){
-  if (!S.running) return;
-  requestAnimationFrame(tick);
-  const bar = $("#level");
-  bar.style.width = Math.min(100, S.peakHold * 100) + "%";
-  bar.classList.toggle("hot", S.peakHold >= 0.999);
-  S.peakHold *= 0.97;
-}
-
-/* ---------------- solving ---------------- */
-function finish(){
+/* ======================= solving ======================= */
+function buildPitchOptions(saved){
   const samples = usableSamples();
-  if (samples.length < 4){
-    setPill("#p2", "not enough notes", "bad");
-    return;
-  }
-  setPill("#p2", samples.length + " measured", "good");
-  $("#curvePanel").classList.remove("hidden");
-
   // Where the piano actually sits, and what to recommend about it (D14).
   const ownCents = median(samples.map(s => cents(S.engine.keyNominalHz(s.key, 440), s.f0)));
   const own = 440 * Math.pow(2, ownCents / 1200);
   const easyPull = Math.abs(ownCents) <= EASY_PULL_CENTS;
-
   const sel = $("#a4");
   const wanted = [
     ["440", "440.0 Hz — standard"],
@@ -789,6 +1072,7 @@ function finish(){
     ["442", "442.0 Hz"],
     ["438", "438.0 Hz"],
   ];
+  if (saved && !wanted.some(w => Number(w[0]) === saved)) wanted.push([String(saved), saved.toFixed(1) + " Hz — as saved"]);
   sel.innerHTML = "";
   for (const [value, label] of wanted){
     const o = document.createElement("option");
@@ -798,14 +1082,35 @@ function finish(){
   // Default to standard unless the piano is too far down to pull in one pass.
   // Recommending its own pitch on an instrument a few cents flat is how every
   // target ends up quietly flat of what any other tuner will tell you.
-  sel.value = easyPull ? "440" : own.toFixed(1);
+  const pick = saved ? wanted.find(w => Number(w[0]) === saved)[0] : easyPull ? "440" : own.toFixed(1);
+  sel.value = pick;
   $("#pitchWhy").textContent = "This piano is sitting at A4 = " + own.toFixed(1) + " Hz, "
     + signed(ownCents, 1) + "¢ from standard. " + (easyPull
-      ? "That is a short pull, so the targets below are set to 440."
-      : "That is a long way to pull in one pass and it will not hold, so the targets below are "
-        + "left at the piano's own pitch. Choose 440 to bring it up anyway.");
-  solve();
-  $("#curvePanel").scrollIntoView({ behavior:"smooth", block:"start" });
+      ? "That is a short pull, so 440 is recommended."
+      : "That is a long way to pull in one pass and it will not hold, so its own pitch is "
+        + "recommended. Choose 440 to bring it up anyway.");
+}
+
+function finish(){
+  const samples = usableSamples();
+  if (samples.length < 4){
+    $("#prompt").textContent = "Not enough notes measured to solve";
+    return;
+  }
+  if (!S.solvedOnce){
+    buildPitchOptions(null);
+    S.solvedOnce = true;
+    solve();
+    $("#pitchBanner").textContent = "Measured " + samples.length
+      + " notes. Check the pitch, then start tuning.";
+    $("#pitchBanner").classList.remove("hidden");
+    $("#btnStartTuning").classList.remove("hidden");
+    openSheet("sheetPitch");
+  } else {
+    // A note added after solving: the curve learns from it quietly.
+    solve();
+  }
+  refresh();
 }
 
 function solve(){
@@ -813,9 +1118,8 @@ function solve(){
   const a4 = Number($("#a4").value) || 440;
   const stretch = Number($("#stretch").value);
   const curve = S.engine.solveCurve(samples, { a4Hz:a4, stretch });
-  if (!curve){ setPill("#p3", "could not solve", "bad"); return; }
+  if (!curve){ $("#pitchWhy").textContent = "Could not solve a tuning from these notes."; return; }
   S.curve = curve;
-  setPill("#p3", "solved", "good");
 
   // What a chromatic tuner set to 440 will read, so it is never a surprise.
   // Two things push the targets below standard and both are deliberate: the
@@ -829,9 +1133,9 @@ function solve(){
     ["Notes measured", String(samples.length)],
     ["Bass break", curve.breakKey ? keyName(curve.breakKey) + " (key " + curve.breakKey + ")" : "none found"],
     ["Model spread", (Math.pow(10, curve.rmsLog10) * 100 - 100).toFixed(0) + "% in stiffness"],
-    ["A0", curve.cents[0].toFixed(1) + "¢   " + curve.hz[0].toFixed(2) + " Hz"],
-    ["A4", curve.cents[48].toFixed(2) + "¢   " + curve.hz[48].toFixed(2) + " Hz"],
-    ["C8", "+" + curve.cents[87].toFixed(1) + "¢   " + curve.hz[87].toFixed(1) + " Hz"],
+    ["A0", signed(curve.cents[0]) + "¢   " + curve.hz[0].toFixed(2) + " Hz"],
+    ["A4", signed(curve.cents[48], 2) + "¢   " + curve.hz[48].toFixed(2) + " Hz"],
+    ["C8", signed(curve.cents[87]) + "¢   " + curve.hz[87].toFixed(1) + " Hz"],
   ]);
 
   const tb = $("#targets tbody");
@@ -839,59 +1143,141 @@ function solve(){
   for (let key = 1; key <= 88; key++){
     const tr = document.createElement("tr");
     tr.innerHTML = "<td>" + key + "</td><td>" + keyName(key) + "</td><td>" +
-      curve.hz[key-1].toFixed(2) + "</td><td>" + curve.cents[key-1].toFixed(2) + "¢</td><td>" +
+      curve.hz[key-1].toFixed(2) + "</td><td>" + signed(curve.cents[key-1], 2) + "¢</td><td>" +
       curve.b[key-1].toExponential(2) + "</td>";
     tb.appendChild(tr);
   }
-  drawChart();
-
-  $("#tunePanel").classList.remove("hidden");
-  if (!S.tuning){
-    S.order = tuningOrder();
-    selectKey(S.tuneKey);
-  }
-  $("#btnTune").disabled = !S.running;
-  if (!S.running) setPill("#p4", "needs the microphone", null);
+  const locked = S.tuned.size > 0;
+  $("#a4").disabled = locked; $("#stretch").disabled = locked;
+  $("#pitchLocked").classList.toggle("hidden", !locked);
+  if (!$("#sheetGraphs").classList.contains("hidden")) drawGraph();
+  if (S.tuning) selectKey(S.tuneKey);
+  savePiano();
+  refresh();
 }
 
-function drawChart(){
-  const c = $("#chart");
-  if (!S.curve || !c.clientWidth) return;
+/* ======================= graphs ======================= */
+function setGraph(g){
+  S.graph = g;
+  for (const b of document.querySelectorAll("[data-graph]")) b.classList.toggle("on", b.dataset.graph === g);
+  $("#graphPane").classList.toggle("hidden", g === "table");
+  $("#tablePane").classList.toggle("hidden", g !== "table");
+  S.graphKey = null;
+  $("#graphRead").textContent = "Touch the graph to read a note";
+  drawGraph();
+}
+
+/* Both graphs share one horizontal axis — the keyboard — drawn under them, so a
+   point on the curve is read straight down to the key it belongs to. */
+function graphGeom(c){
+  const w = c.clientWidth, h = Math.round(Math.min(300, Math.max(200, w * 0.55)));
+  const padL = 40, padR = 8, padT = 10, kbH = 26, padB = kbH + 6;
+  return { w, h, padL, padR, padT, padB, kbH,
+    x: k => padL + ((k - 0.5) / 88) * (w - padL - padR),
+    keyAt: px => Math.max(1, Math.min(88, Math.floor((px - padL) / (w - padL - padR) * 88) + 1)) };
+}
+
+function drawGraph(){
+  const c = $("#graph");
+  if (S.graph === "table" || !c.clientWidth) return;
+  const G = graphGeom(c);
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const w = c.clientWidth, h = Math.round(w * 220 / 720);
-  if (c.width !== Math.round(w*dpr)){ c.width = Math.round(w*dpr); c.height = Math.round(h*dpr); c.style.height = h + "px"; }
+  c.width = Math.round(G.w * dpr); c.height = Math.round(G.h * dpr); c.style.height = G.h + "px";
   const g = c.getContext("2d");
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
-  g.fillStyle = "#0a0d11"; g.fillRect(0, 0, w, h);
+  g.clearRect(0, 0, G.w, G.h);
+  const ink = css("--ink"), dim = css("--dim"), line = css("--line"), brass = css("--brass"), good = css("--good");
 
-  const lo = Math.min(-2, Math.min(...S.curve.cents) - 2);
-  const hi = Math.max(2, Math.max(...S.curve.cents) + 2);
-  const x = k => ((k - 1) / 87) * (w - 34) + 26;
-  const y = v => h - 18 - ((v - lo) / (hi - lo)) * (h - 34);
-
-  g.strokeStyle = "#1b222c"; g.lineWidth = 1;
-  g.font = "10px ui-monospace, monospace"; g.fillStyle = "#8b95a4";
-  for (let v = Math.ceil(lo / 10) * 10; v <= hi; v += 10){
-    g.beginPath(); g.moveTo(24, y(v)); g.lineTo(w - 6, y(v)); g.stroke();
-    g.fillText(String(v), 2, y(v) + 3);
+  if (!S.curve){
+    g.fillStyle = dim; g.font = "14px " + css("--sans");
+    g.fillText("Measure at least four notes and solve first.", 12, 30);
+    $("#graphNote").textContent = "";
+    return;
   }
-  g.strokeStyle = "#2b323e";
-  g.beginPath(); g.moveTo(24, y(0)); g.lineTo(w - 6, y(0)); g.stroke();
 
-  g.strokeStyle = "#c9a15a"; g.lineWidth = 2; g.beginPath();
-  for (let k = 1; k <= 88; k++){
-    const px = x(k), py = y(S.curve.cents[k-1]);
-    if (k === 1) g.moveTo(px, py); else g.lineTo(px, py);
+  // Values for whichever graph is showing.
+  const isB = S.graph === "b";
+  const val = k => isB ? Math.log10(S.curve.b[k-1]) : S.curve.cents[k-1];
+  const pts = usableSamples().map(s => ({ key: s.key, v: isB ? Math.log10(s.b) : S.curve.cents[s.key-1] }));
+  const all = [...Array(88)].map((_, i) => val(i + 1)).concat(pts.map(p => p.v));
+  let lo = Math.min(...all), hi = Math.max(...all);
+  if (isB){ lo = Math.floor(lo * 2) / 2 - 0.1; hi = Math.ceil(hi * 2) / 2 + 0.1; }
+  else { lo = Math.min(-2, lo - 2); hi = Math.max(2, hi + 2); }
+  const plotB = G.h - G.padB;
+  const y = v => plotB - ((v - lo) / (hi - lo)) * (plotB - G.padT);
+
+  // Grid
+  g.font = "10px " + css("--mono"); g.lineWidth = 1;
+  if (isB){
+    for (let e = Math.ceil(lo); e <= hi; e++){
+      g.strokeStyle = line; g.beginPath(); g.moveTo(G.padL, y(e)); g.lineTo(G.w - G.padR, y(e)); g.stroke();
+      g.fillStyle = dim; g.fillText("10" + supers(e), 4, y(e) + 3);
+    }
+  } else {
+    const step = hi - lo > 40 ? 10 : 5;
+    for (let v = Math.ceil(lo / step) * step; v <= hi; v += step){
+      g.strokeStyle = line; g.beginPath(); g.moveTo(G.padL, y(v)); g.lineTo(G.w - G.padR, y(v)); g.stroke();
+      g.fillStyle = dim; g.fillText((v > 0 ? "+" : "") + v + "¢", 2, y(v) + 3);
+    }
+    g.strokeStyle = dim; g.beginPath(); g.moveTo(G.padL, y(0)); g.lineTo(G.w - G.padR, y(0)); g.stroke();
   }
+
+  // Bass break
+  if (isB && S.curve.breakKey){
+    const bx = G.x(S.curve.breakKey) - (G.x(2) - G.x(1)) / 2;
+    g.setLineDash([3, 3]); g.strokeStyle = dim;
+    g.beginPath(); g.moveTo(bx, G.padT); g.lineTo(bx, plotB); g.stroke(); g.setLineDash([]);
+    g.fillStyle = dim; g.fillText("break", bx + 3, G.padT + 9);
+  }
+
+  // The model, then the notes actually measured.
+  g.strokeStyle = brass; g.lineWidth = 2.2; g.beginPath();
+  for (let k = 1; k <= 88; k++){ const px = G.x(k), py = y(val(k)); if (k === 1) g.moveTo(px, py); else g.lineTo(px, py); }
   g.stroke();
+  g.fillStyle = good;
+  for (const p of pts){ g.beginPath(); g.arc(G.x(p.key), y(p.v), 3.4, 0, Math.PI * 2); g.fill(); }
 
-  g.fillStyle = "#56b38a";
-  for (const s of usableSamples()){
-    g.beginPath(); g.arc(x(s.key), y(S.curve.cents[s.key-1]), 3, 0, Math.PI * 2); g.fill();
+  // Keyboard along the bottom
+  const kw = (G.w - G.padL - G.padR) / 88, ky = G.h - G.kbH;
+  g.fillStyle = css("--wkey"); g.fillRect(G.padL, ky, G.w - G.padL - G.padR, G.kbH);
+  g.strokeStyle = css("--wkey-edge"); g.strokeRect(G.padL + .5, ky + .5, G.w - G.padL - G.padR - 1, G.kbH - 1);
+  g.fillStyle = css("--bkey");
+  for (let k = 1; k <= 88; k++) if (isBlack(k)) g.fillRect(G.padL + (k - 1) * kw, ky, kw, G.kbH * 0.6);
+  g.fillStyle = dim;
+  for (let k = 4; k <= 76; k += 12) g.fillText(String(Math.floor((k + 8) / 12)), G.padL + (k - 1) * kw + 1, ky + G.kbH - 3);
+
+  // The touched note
+  if (S.graphKey){
+    const k = S.graphKey, px = G.x(k);
+    g.strokeStyle = ink; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(px, G.padT); g.lineTo(px, G.h); g.stroke();
+    g.fillStyle = ink; g.beginPath(); g.arc(px, y(val(k)), 4.5, 0, Math.PI * 2); g.fill();
   }
+
+  $("#graphNote").textContent = isB
+    ? "How stiff each string is (inharmonicity, B), on a log scale. Dots are notes measured; the line is the model across all 88."
+    : "Cents from equal temperament at A4 = " + Number($("#a4").value).toFixed(1)
+      + " Hz. Below the line is flat of equal temperament, above is sharp. This is the stretch the targets ask for.";
 }
 
-/* ---------------- tuning ---------------- */
+function readGraph(clientX){
+  const c = $("#graph");
+  if (!S.curve) return;
+  const r = c.getBoundingClientRect();
+  const k = graphGeom(c).keyAt(clientX - r.left);
+  S.graphKey = k;
+  const measured = S.results.get(k);
+  if (S.graph === "b"){
+    $("#graphRead").textContent = keyName(k) + " · B " + sci(S.curve.b[k-1])
+      + (measured && measured.ok ? " · measured " + sci(measured.b) : " · from the model");
+  } else {
+    $("#graphRead").textContent = keyName(k) + " · " + signed(S.curve.cents[k-1]) + "¢ stretch · "
+      + S.curve.hz[k-1].toFixed(2) + " Hz · " + signed(cents(S.engine.keyNominalHz(k, 440), S.curve.hz[k-1])) + "¢ on a 440 tuner";
+  }
+  drawGraph();
+}
+
+/* ======================= tuning ======================= */
 
 /* The most recent stretch of audio, straight out of the ring. */
 function recentAudio(seconds){
@@ -941,35 +1327,17 @@ function startTuning(){
   if (!S.curve || !S.running) return;
   S.tuning = true;
   S.order = tuningOrder();
-  // Neither of these may move once a note has been tuned to them.
-  $("#a4").disabled = true;
-  $("#stretch").disabled = true;
-  $("#btnTune").textContent = "Stop tuning";
-  $("#btnDone").disabled = false;
-  $("#btnBack").disabled = false;
-  setPill("#p4", "tuning", "good");
-  setPill("#p2", "paused", null);
-  $("#tPiano").textContent = $("#pName").value || "This piano";
-  $("#tuner").classList.remove("hidden");
-  document.body.classList.add("tuning");
   // Pick up where the sequence left off rather than wherever the last tap was.
   selectKey(S.order.find(k => !S.tuned.has(k)) || TEMPERAMENT_LOW);
+  centerOn(S.tuneKey, false);
   meterTick();
 }
 
-function stopTuning(){
+function stopTuningMeter(){
   S.tuning = false;
   clearTimeout(S.meterTimer);
   S.lock = null;
   S.readings = [];
-  $("#tuner").classList.add("hidden");
-  document.body.classList.remove("tuning");
-  $("#btnTune").textContent = S.tuned.size ? "Carry on tuning" : "Start tuning";
-  // The reference and the stretch stay locked once anything has been tuned to
-  // them: a target a note has already been set to must never move.
-  $("#a4").disabled = S.tuned.size > 0;
-  $("#stretch").disabled = S.tuned.size > 0;
-  setPill("#p4", S.tuned.size + " of 88 tuned", S.tuned.size ? "good" : null);
 }
 
 /* Where partial n of this key should sit if the note were exactly on target. */
@@ -1012,17 +1380,16 @@ function selectKey(key){
       + signed(cents(S.engine.keyNominalHz(key, 440), S.curve.hz[key-1])) + "¢ on a 440 tuner"
     : "";
   $("#tuneCents").textContent = "—";
-  $("#tuneCents").className = "t-live";
+  $("#tuneCents").className = "live";
   $("#tuneHeld").textContent = "—";
-  $("#tuneHeld").className = "t-held waiting";
+  $("#tuneHeld").className = "held waiting";
   const i = S.order.indexOf(key);
   $("#btnBack").innerHTML = i > 0 ? "&larr; " + keyName(S.order[i-1]) : "&larr;";
   $("#btnDone").innerHTML = i >= 0 && i + 1 < S.order.length
     ? "Done &rarr; " + keyName(S.order[i+1]) : "Done";
-  $("#tCount").textContent = S.tuned.size + " / 88 tuned";
   buildLadder();
   paintUnison(null);
-  renderKeys();
+  renderKeyboard();
 }
 
 /* Strictly the next key along, even if it has been tuned already. Skipping to
@@ -1035,13 +1402,110 @@ function nextInOrder(from){
 
 function markDone(){
   S.tuned.add(S.tuneKey);
-  setPill("#p4", S.tuned.size + " of 88 tuned", "good");
+  // The reference and the stretch lock as soon as anything is tuned to them.
+  $("#a4").disabled = true; $("#stretch").disabled = true;
+  $("#pitchLocked").classList.remove("hidden");
+  savePiano();
   selectKey(nextInOrder(S.tuneKey));
+  centerOn(S.tuneKey, true);
+  refresh();
+}
+
+/* A note that held in tune while following: marked, and left where it is —
+   the technician moves on by playing the next key, not by being moved. */
+function markTunedHere(){
+  if (S.tuned.has(S.tuneKey)) return;
+  S.tuned.add(S.tuneKey);
+  $("#a4").disabled = true; $("#stretch").disabled = true;
+  $("#pitchLocked").classList.remove("hidden");
+  $("#tuneStage").textContent = sectionLabel(S.tuneKey);
+  savePiano();
+  refresh();
+}
+
+/* ---- following the key played ---- */
+const following = () => $("#follow").value === "1";
+
+/* Called for every block of audio while tuning. */
+function watchForBlow(rms, blockLen){
+  if (!Number.isFinite(rms)) return;
+  const now = performance.now();
+  if (S.followPending){
+    S.followPending.need -= blockLen;
+    if (S.followPending.need <= 0){
+      const p = S.followPending;
+      S.followPending = null;
+      // Off the audio thread's message handler, so a slow phone does not
+      // back the microphone up behind the engine.
+      setTimeout(() => runFollow(p), 0);
+    }
+  } else if (now - S.followAt > FOLLOW_REARM_MS && rms > S.recentDb + FOLLOW_RISE_DB && rms > ONSET_FLOOR_DB){
+    if (!S.followFrame) S.followFrame = Math.pow(2, Math.round(Math.log2(S.sampleRate * FOLLOW_SECONDS)));
+    S.followAt = now;
+    S.followPending = {
+      // Where the blow landed in the ring: the start of the block that rose.
+      at: (S.ringPos - blockLen + S.ringLen) % S.ringLen,
+      need: S.followFrame,
+    };
+  }
+  // The level of the last moment or so, for judging the next rise against.
+  S.recentDb += (rms - S.recentDb) * 0.12;
+}
+
+/* Where every string is believed to sit, relative to its target: zero once
+   tuned, its measured offset if it was measured, the piano's overall offset for
+   the rest — nudged towards the last live reading, but never far.
+
+   Never far, because the live reading can itself be wrong in exactly the way
+   that matters: strike C#4 while C4 is on screen and the meter, searching wide,
+   reads it as "C4, 98 cents sharp". Trusted outright, that reading moved C4's
+   expected place onto C#4, the detector could no longer tell the two apart, and
+   the screen stuck on the wrong key. A pin turn moves a string tens of cents;
+   anything further than this from what was known is not believed. */
+const SEEN_TRUST_CENTS = 25;
+function expectCents(){
+  const measured = new Map();
+  for (const r of S.results.values()) if (r.ok) measured.set(r.key, cents(S.curve.hz[r.key-1], r.f0));
+  const overall = measured.size ? median([...measured.values()]) : 0;
+  const out = new Array(88);
+  for (let k = 1; k <= 88; k++){
+    const base = S.tuned.has(k) ? 0 : measured.has(k) ? measured.get(k) : overall;
+    const seen = S.seen.get(k);
+    out[k-1] = seen === undefined ? base
+      : base + Math.max(-SEEN_TRUST_CENTS, Math.min(SEEN_TRUST_CENTS, seen - base));
+  }
+  return out;
+}
+
+function runFollow(p){
+  if (!S.tuning || !following() || !S.curve) return;
+  const n = S.followFrame;
+  const total = n * 2;
+  const buf = new Float32Array(total);
+  const start = (p.at - n + S.ringLen * 2) % S.ringLen;
+  for (let i = 0; i < total; i++) buf[i] = S.ring[(start + i) % S.ringLen];
+  const d = S.engine.identify(buf, n, S.sampleRate, S.curve, expectCents(), S.tuneKey);
+  if (!d) return;
+  S.lastFollow = d;
+  if (d.decision === "switch" && d.keyToTune && d.keyToTune !== S.tuneKey){
+    selectKey(d.keyToTune);
+    centerOn(d.keyToTune, true);
+    const name = $("#tuneNote");
+    name.classList.add("followed");
+    setTimeout(() => name.classList.remove("followed"), 600);
+  }
 }
 
 function meterTick(){
   if (!S.tuning || !S.ring) return;
   const began = performance.now();
+  // A blow has landed and which key it was is about to be known. Reading now
+  // would read the new string against the old key's target and flash a wrong
+  // number for the moment it takes to find out.
+  if (S.followPending){
+    S.meterTimer = setTimeout(meterTick, METER_MIN_MS);
+    return;
+  }
   const key = S.tuneKey;
   const target = S.curve.hz[key-1];
   const b = S.curve.b[key-1];
@@ -1104,7 +1568,6 @@ function noteStrike(r, now){
    says the note is *now*. A row is read only once every few ticks, so its own
    last frequency can be well out of date after a pin turn; aimed there, it was
    seen to settle on something a semitone away and report it with confidence. */
-const RUNG_DISAGREE_CENTS = 25;
 function readOneRung(audio, key, b, now){
   const others = S.rungs.filter(n => n !== S.lock.partial);
   if (!others.length) return;
@@ -1180,8 +1643,8 @@ function paintLadder(now){
 }
 
 function stringsFor(key){
-  if (key <= Number($("#pSingle").value || 0)) return 1;
-  if (key <= Number($("#pDouble").value || 0)) return 2;
+  if (key <= S.piano.single) return 1;
+  if (key <= S.piano.double) return 2;
   return 3;
 }
 
@@ -1210,12 +1673,12 @@ function paintMeter(now){
 
   if (S.held !== null){
     held.textContent = signed(S.held);
-    held.className = "t-held" + (S.strike ? " waiting" : "");
+    held.className = "held" + (S.strike ? " waiting" : "");
   }
 
   if (!s){
     el.textContent = "—";
-    el.className = "t-live";
+    el.className = "live";
     $("#tuneWay").textContent = S.lock ? "Listening" : "Play the note";
     paintUnison(null);
     S.insideSince = 0;
@@ -1223,10 +1686,12 @@ function paintMeter(now){
   }
 
   const c = s.cents;
+  const before = S.seen.get(S.tuneKey);
   S.seen.set(S.tuneKey, c);
+  if (before === undefined || (Math.abs(before) > tol * 3) !== (Math.abs(c) > tol * 3)) renderKeyboard();
   const inside = Math.abs(c) <= tol;
   el.textContent = signed(c);
-  el.className = "t-live " + (inside ? "on" : Math.abs(c) <= tol * 3 ? "near" : "off")
+  el.className = "live " + (inside ? "on" : Math.abs(c) <= tol * 3 ? "near" : "off")
     + (stale ? " stale" : "");
   $("#tuneWay").textContent = inside ? "Holding"
     : (c < 0 ? "Flat — raise it" : "Sharp — lower it")
@@ -1238,161 +1703,154 @@ function paintMeter(now){
   // hands can stay where they are. A swinging reading is not held.
   if (inside && !stale && s.spread <= tol * 3){
     if (!S.insideSince) S.insideSince = now;
-    else if (now - S.insideSince >= SETTLE_MS && $("#advance").value === "1") markDone();
+    else if (now - S.insideSince >= SETTLE_MS && $("#advance").value === "1"){
+      // Following: mark it and stay; the next key played moves the screen.
+      // Not following: mark it and move on along the sequence.
+      if (following()) markTunedHere(); else markDone();
+    }
   } else {
     S.insideSince = 0;
   }
 }
 
-/* ---- the whole-piano strip ---- */
-function renderKeys(pick){
-  const bars = $("#bars");
-  if (bars.childElementCount !== 88){
-    bars.innerHTML = "";
-    for (let k = 1; k <= 88; k++) bars.appendChild(document.createElement("i"));
-    const oct = $("#octaves");
-    oct.innerHTML = "";
-    for (let k = 1; k <= 88; k++){
-      const name = keyName(k);
-      if (name.startsWith("C") && !name.includes("#")){
-        const s = document.createElement("span");
-        s.textContent = name;
-        s.style.left = ((k - 0.5) / 88 * 100) + "%";
-        if (k === 88) s.style.transform = "translateX(-80%)";
-        oct.appendChild(s);
-      }
-    }
-  }
+/* ======================= the keyboard ======================= */
+function keyState(k){
   const tol = Number($("#tol").value);
-  [...bars.children].forEach((b, i) => {
-    const k = i + 1;
+  if (S.mode === "tune"){
+    if (k === S.tuneKey) return "now";
+    if (S.tuned.has(k)) return "tuned";
     const seen = S.seen.get(k);
-    b.className = k === pick ? "pick"
-      : k === S.tuneKey ? "now"
-      : S.tuned.has(k) ? "done"
-      : seen !== undefined && Math.abs(seen) > tol * 3 ? "off" : "";
-  });
-  const w = $("#whole");
-  w.setAttribute("aria-valuenow", String(S.tuneKey));
-  w.setAttribute("aria-valuetext", keyName(S.tuneKey));
+    return seen !== undefined && Math.abs(seen) > tol * 3 ? "off" : "";
+  }
+  if (k === currentKey()) return "now";
+  const r = S.results.get(k);
+  if (r) return r.ok ? "measured" : "failed";
+  return S.plan.indexOf(k, S.index) >= 0 ? "planned" : "";
 }
 
-function keyAt(clientX){
-  const r = $("#bars").getBoundingClientRect();
+function buildKeyboard(){
+  const kb = $("#kb");
+  kb.innerHTML = "";
+  let wi = 0;
+  for (let k = 1; k <= 88; k++){
+    const b = document.createElement("button");
+    b.dataset.key = String(k);
+    b.setAttribute("aria-label", keyName(k));
+    const mk = document.createElement("i"); mk.className = "mk";
+    if (isBlack(k)){
+      b.className = "b";
+      b.style.left = (wi * WHITE_W - BLACK_W / 2) + "px";
+      b.style.width = BLACK_W + "px";
+    } else {
+      b.className = "w";
+      b.style.left = (wi * WHITE_W) + "px";
+      b.style.width = (WHITE_W + 1) + "px";
+      const name = keyName(k);
+      if (name.startsWith("C") || k === 1){
+        const nm = document.createElement("span"); nm.className = "nm"; nm.textContent = name;
+        b.appendChild(nm);
+      }
+      wi++;
+    }
+    b.appendChild(mk);
+    b.addEventListener("click", () => chooseKey(k));
+    kb.appendChild(b);
+  }
+  kb.style.width = (wi * WHITE_W + 1) + "px";
+  const bars = $("#ovBars");
+  bars.innerHTML = "";
+  for (let k = 1; k <= 88; k++) bars.appendChild(document.createElement("i"));
+}
+
+function renderKeyboard(pick){
+  const kb = $("#kb");
+  for (const b of kb.children){
+    const k = Number(b.dataset.key);
+    b.className = (isBlack(k) ? "b" : "w") + " " + keyState(k);
+  }
+  [...$("#ovBars").children].forEach((b, i) => {
+    const k = i + 1;
+    b.className = k === pick ? "pick" : keyState(k);
+  });
+  const ov = $("#ov");
+  const k = currentKey();
+  if (k){ ov.setAttribute("aria-valuenow", String(k)); ov.setAttribute("aria-valuetext", keyName(k)); }
+  paintWindow();
+}
+
+/* The part of the keyboard on screen, outlined on the strip below it. */
+function paintWindow(){
+  const sc = $("#kbScroll"), kb = $("#kb");
+  const total = kb.offsetWidth || 1;
+  const from = Math.max(0, (sc.scrollLeft - 8) / total), span = Math.min(1, sc.clientWidth / total);
+  const win = $("#ovWin");
+  win.style.left = (from * 100) + "%";
+  win.style.width = (span * 100) + "%";
+}
+
+function keyCenterPx(k){
+  const b = $("#kb").children[k - 1];
+  return b ? b.offsetLeft + b.offsetWidth / 2 + 8 : 0;
+}
+
+function centerOn(k, smooth){
+  if (!k) return;
+  const sc = $("#kbScroll");
+  sc.scrollTo({ left: keyCenterPx(k) - sc.clientWidth / 2, behavior: smooth ? "smooth" : "auto" });
+}
+
+/* A key tapped or picked: measured next in Measure mode, tuned in Tune mode. */
+function chooseKey(k){
+  if (S.mode === "tune"){ if (S.curve){ selectKey(k); } }
+  else measureKey(k);
+  centerOn(k, true);
+}
+
+function ovKeyAt(clientX){
+  const r = $("#ovBars").getBoundingClientRect();
   return Math.max(1, Math.min(88, Math.floor((clientX - r.left) / r.width * 88) + 1));
 }
-
 function showPick(k){
   let tag = $("#pickname");
-  if (!tag){ tag = document.createElement("span"); tag.id = "pickname"; tag.className = "pickname"; $("#whole").appendChild(tag); }
+  if (!tag){ tag = document.createElement("span"); tag.id = "pickname"; tag.className = "pickname"; $("#ov").appendChild(tag); }
   tag.textContent = keyName(k);
   tag.style.left = ((k - 0.5) / 88 * 100) + "%";
-  renderKeys(k);
+  centerOn(k, false);
+  renderKeyboard(k);
 }
-
 function endPick(k){
   const tag = $("#pickname");
   if (tag) tag.remove();
-  if (k) selectKey(k); else renderKeys();
+  if (k && !(S.mode === "measure" && measuringClosed())) chooseKey(k); else renderKeyboard();
 }
 
-const whole = $("#whole");
-whole.addEventListener("pointerdown", e => {
-  S.scrubbing = true;
-  whole.setPointerCapture(e.pointerId);
-  showPick(keyAt(e.clientX));
+/* ======================= wiring ======================= */
+$("#btnNewPiano").addEventListener("click", () => {
+  $("#nName").value = ""; $("#nNotes").value = ""; $("#nSingle").value = "8"; $("#nDouble").value = "16";
+  openSheet("sheetNew");
 });
-whole.addEventListener("pointermove", e => { if (S.scrubbing) showPick(keyAt(e.clientX)); });
-whole.addEventListener("pointerup", e => { if (!S.scrubbing) return; S.scrubbing = false; endPick(keyAt(e.clientX)); });
-whole.addEventListener("pointercancel", () => { S.scrubbing = false; endPick(null); });
-whole.addEventListener("keydown", e => {
-  const step = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
-  if (!step) return;
-  e.preventDefault();
-  selectKey(Math.max(1, Math.min(88, S.tuneKey + step)));
+$("#btnBegin").addEventListener("click", beginNewPiano);
+$("#btnHome").addEventListener("click", goHome);
+$("#btnPitch").addEventListener("click", () => {
+  if (!S.curve) return;
+  $("#pitchBanner").classList.add("hidden");
+  $("#btnStartTuning").classList.toggle("hidden", S.mode === "tune");
+  openSheet("sheetPitch");
 });
+$("#btnGraphs").addEventListener("click", () => { openSheet("sheetGraphs"); setGraph(S.graph); });
+$("#btnSettings").addEventListener("click", () => openSheet("sheetSettings"));
+$("#btnStartTuning").addEventListener("click", () => { closeSheet(); setMode("tune"); });
+for (const b of document.querySelectorAll("[data-close]")) b.addEventListener("click", closeSheet);
+$("#dim").addEventListener("click", e => { if (e.target === $("#dim")) closeSheet(); });
+for (const b of document.querySelectorAll("[data-graph]")) b.addEventListener("click", () => setGraph(b.dataset.graph));
 
-/* ---------------- storage ---------------- */
-const loadStore = () => { try { return JSON.parse(localStorage.getItem(STORE_KEY)) || []; } catch(e){ return []; } };
-const saveStore = list => { try { localStorage.setItem(STORE_KEY, JSON.stringify(list)); return true; } catch(e){ return false; } };
+$("#modeMeasure").addEventListener("click", () => setMode("measure"));
+$("#modeTune").addEventListener("click", () => setMode("tune"));
+$("#btnMic").addEventListener("click", async () => { if (await startMic()) refresh(); });
 
-function pianoRecord(){
-  return {
-    id: S.pianoId || ("p" + Date.now()),
-    name: $("#pName").value || "(unnamed)",
-    type: $("#pType").value,
-    notes: $("#pNotes").value,
-    stringing: { single: Number($("#pSingle").value), double: Number($("#pDouble").value) },
-    a4: Number($("#a4").value) || 440,
-    stretch: Number($("#stretch").value),
-    samples: usableSamples(),
-    tuned: [...S.tuned],
-    savedAt: new Date().toISOString(),
-  };
-}
-
-function savePiano(){
-  const rec = pianoRecord();
-  S.pianoId = rec.id;
-  const list = loadStore().filter(p => p.id !== rec.id);
-  list.unshift(rec);
-  const ok = saveStore(list);
-  $("#saveNote").textContent = ok
-    ? "saved " + new Date().toLocaleTimeString()
-    : "could not save — export instead";
-  renderSaved();
-}
-
-function renderSaved(){
-  const list = loadStore();
-  $("#savedWrap").classList.toggle("hidden", list.length === 0);
-  const box = $("#savedList");
-  box.innerHTML = "";
-  for (const p of list){
-    const b = document.createElement("button");
-    b.textContent = p.name + "  · " + p.samples.length + " notes · " + p.savedAt.slice(0, 10);
-    b.addEventListener("click", () => loadPiano(p));
-    box.appendChild(b);
-  }
-}
-
-function loadPiano(p){
-  $("#pName").value = p.name;
-  $("#pType").value = p.type;
-  $("#pNotes").value = p.notes || "";
-  $("#pSingle").value = p.stringing ? p.stringing.single : 8;
-  $("#pDouble").value = p.stringing ? p.stringing.double : 16;
-  S.pianoId = p.id;
-  S.results.clear();
-  for (const s of p.samples){
-    S.results.set(s.key, {
-      key:s.key, ok:true, f0:s.f0, b:s.b, weight:s.weight,
-      offsetCents: 0, rmsCents: 0, beat: null, concerns: [], partials: 0,
-    });
-  }
-  S.tuned = new Set(p.tuned || []);
-  S.plan = p.samples.map(s => s.key);
-  S.index = S.plan.length;
-  if (S.engine){ renderStrip(); finish(); $("#a4").value = String(p.a4); $("#stretch").value = String(p.stretch); solve(); }
-  else setPill("#p1", "loaded — start to solve", "good");
-}
-
-function exportPiano(){
-  const rec = pianoRecord();
-  if (S.curve) rec.curve = { a4: rec.a4, cents: S.curve.cents, hz: S.curve.hz, b: S.curve.b };
-  const blob = new Blob([JSON.stringify(rec, null, 2)], { type:"application/json" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = (rec.name.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "piano") + ".json";
-  document.body.appendChild(a); a.click();
-  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
-}
-
-/* ---------------- wiring ---------------- */
-$("#btnStart").addEventListener("click", start);
-$("#btnSkip").addEventListener("click", () => { if (S.index < S.plan.length){ S.index++; advance(); } });
+$("#btnSkip").addEventListener("click", () => { if (S.index < S.plan.length){ S.capturing = false; S.index++; advance(); } });
 $("#btnRedo").addEventListener("click", () => {
-  if (S.lastKey === null) return;
+  if (S.lastKey === null || measuringClosed()) return;
   const i = S.plan.indexOf(S.lastKey);
   if (i < 0) return;
   S.results.delete(S.lastKey);
@@ -1400,28 +1858,68 @@ $("#btnRedo").addEventListener("click", () => {
   S.index = i;
   S.lastKey = null;
   $("#btnRedo").disabled = true;
-  kv($("#lastResult"), []);
-  renderStrip(); showTarget();
+  kv($("#lastResult"), [["Last note", "measuring it again"]]);
+  refresh();
 });
-$("#btnFinish").addEventListener("click", () => { S.index = S.plan.length; finish(); });
-$("#btnSave").addEventListener("click", savePiano);
-$("#btnExport").addEventListener("click", exportPiano);
-$("#btnNew").addEventListener("click", () => location.reload());
+$("#btnFinish").addEventListener("click", () => { S.capturing = false; S.index = S.plan.length; finish(); });
+
 $("#a4").addEventListener("change", solve);
 $("#stretch").addEventListener("change", solve);
-$("#btnTune").addEventListener("click", () => (S.tuning ? stopTuning() : startTuning()));
 $("#btnDone").addEventListener("click", markDone);
 $("#btnBack").addEventListener("click", () => {
   const i = S.order.indexOf(S.tuneKey);
-  if (i > 0) selectKey(S.order[i - 1]);
+  if (i > 0){ selectKey(S.order[i - 1]); centerOn(S.tuneKey, true); }
 });
-$("#btnStop").addEventListener("click", stopTuning);
-$("#tol").addEventListener("change", () => { S.insideSince = 0; renderKeys(); });
-window.addEventListener("resize", drawChart);
+$("#tol").addEventListener("change", () => { S.insideSince = 0; renderKeyboard(); });
 
-renderSaved();
-renderStrip();
-showTarget();
+/* Following is a habit of the technician, not a property of a piano, so it is
+   remembered on the phone rather than per piano. */
+function explainAdvance(){
+  $("#advanceWhy").textContent = following()
+    ? "Mark it tuned: a note that holds in tune turns green and the screen stays on it. Play the next key to move."
+    : "Mark it tuned: a note that holds in tune turns green and the screen moves to the next key along.";
+}
+try { const f = localStorage.getItem(FOLLOW_KEY); if (f === "0" || f === "1") $("#follow").value = f; } catch(e){}
+$("#follow").addEventListener("change", () => {
+  try { localStorage.setItem(FOLLOW_KEY, $("#follow").value); } catch(e){}
+  S.followPending = null;
+  explainAdvance();
+});
+explainAdvance();
+$("#btnExport").addEventListener("click", exportPiano);
+
+for (const [id, field, num] of [["#sName","name",false],["#sNotes","notes",false],["#sSingle","single",true],["#sDouble","double",true]]){
+  $(id).addEventListener("change", () => {
+    const v = $(id).value;
+    S.piano[field] = num ? (Number(v) || 0) : (v.trim() || (field === "name" ? "Unnamed piano" : ""));
+    savePiano();
+    refresh();
+    if (S.tuning) paintUnison(null);
+  });
+}
+
+const graph = $("#graph");
+graph.addEventListener("pointerdown", e => { graph.setPointerCapture(e.pointerId); readGraph(e.clientX); });
+graph.addEventListener("pointermove", e => { if (e.buttons) readGraph(e.clientX); });
+
+const ov = $("#ov");
+ov.addEventListener("pointerdown", e => { S.scrubbing = true; ov.setPointerCapture(e.pointerId); showPick(ovKeyAt(e.clientX)); });
+ov.addEventListener("pointermove", e => { if (S.scrubbing) showPick(ovKeyAt(e.clientX)); });
+ov.addEventListener("pointerup", e => { if (!S.scrubbing) return; S.scrubbing = false; endPick(ovKeyAt(e.clientX)); });
+ov.addEventListener("pointercancel", () => { S.scrubbing = false; endPick(null); });
+ov.addEventListener("keydown", e => {
+  const step = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+  if (!step) return;
+  e.preventDefault();
+  const k = currentKey() || TEMPERAMENT_LOW;
+  chooseKey(Math.max(1, Math.min(88, k + step)));
+});
+$("#kbScroll").addEventListener("scroll", paintWindow, { passive:true });
+window.addEventListener("resize", () => { paintWindow(); if (!$("#sheetGraphs").classList.contains("hidden")) drawGraph(); });
+
+buildKeyboard();
+renderPianoList();
+showScreen("home");
 </script>
 </body>
 </html>
