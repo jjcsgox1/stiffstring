@@ -13,7 +13,7 @@
 (function (global) {
   "use strict";
 
-  const EXPECTED_ABI = 5;
+  const EXPECTED_ABI = 6;
 
   const NOTE_HEADER = 7;
   const PARTIAL_STRIDE = 7;
@@ -115,10 +115,14 @@
      * fundamental is expected — the key being worked on. It may be well over a
      * semitone out; the partials themselves settle the answer.
      *
+     * `bHint`, optional, is a stiffness to assume if the note shows too few
+     * partials to measure its own — most of the top octave. Leave it out and
+     * such a note comes back null.
+     *
      * Returns null when the note could not be measured, which is a real answer
      * rather than an error: too quiet, too short, or nothing there to measure.
      */
-    measureNote(samples, sampleRate, f0Hint) {
+    measureNote(samples, sampleRate, f0Hint, bHint) {
       const inBytes = samples.length * 4;
       // Enough room for the header plus a generous number of partials.
       const outCount = NOTE_HEADER + 32 * PARTIAL_STRIDE;
@@ -135,6 +139,7 @@
           samples.length,
           sampleRate,
           f0Hint,
+          bHint > 0 ? bHint : 0,
           outPtr,
           outCount
         );

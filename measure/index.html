@@ -300,8 +300,9 @@ th{font-family:var(--sans);font-size:11px;color:var(--dim);font-weight:600;text-
       <div class="level"><i id="level"></i></div>
       <div class="card"><dl class="kv" id="lastResult"><dt>Last note</dt><dd>none yet</dd></dl></div>
       <p class="note" id="measureCount">&nbsp;</p>
-      <p class="note">Strike each note firmly and let it ring. The app picks the notes; tap a key below
-        to measure a different one instead.</p>
+      <p class="note">Play every key from the bottom up, one at a time, firmly. About a second each is
+        enough; the screen moves on by itself when it has the note. You can stop at any point
+        with Solve, and tap any key below to measure it again.</p>
       <div class="actions" style="margin-top:auto">
         <button id="btnSkip">Skip</button>
         <button id="btnRedo" disabled>Redo last</button>
@@ -455,11 +456,36 @@ const NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
 const keyName = k => { const m = k + 20; return NAMES[m % 12] + (Math.floor(m / 12) - 1); };
 const isBlack = k => keyName(k).includes("#");
 
-const CAPTURE_SECONDS = 3.2;
+/* Measuring runs up the keyboard from A0, every key. Measured on the recorded
+   notes from the moment of the blow, 1.2 s of sound gives every note from F#1
+   up within about a cent of a 3.2 s capture, and its stiffness within a few
+   percent; the deep bass wants 1.6 s. Shorter captures are the faster pass. */
+const CAPTURE_SECONDS = 3.2;  // the most a capture can be: sizes the ring
+const CAPTURE_BASS_SECONDS = 1.6;
+const CAPTURE_MAIN_SECONDS = 1.2;
+const CAPTURE_BASS_TO = 21;   // F1 and below get the longer capture
 const PREROLL_SECONDS = 0.15;
 const ONSET_RISE_DB = 14;
 const ONSET_FLOOR_DB = -62;
-const REARM_SECONDS = 0.9;
+const REARM_SECONDS = 0.25;
+/* Playing up the keyboard, the last note is still ringing when the next is
+   struck. A blow is a jump above what was sounding a moment ago, not merely a
+   level above the room — or the tail of the last note would start a capture
+   of its own and be filed as this one. */
+const ONSET_JUMP_DB = 8;
+/* A measurement this far from where the note below it sits was not this key:
+   the wrong key played, or the last one still sounding. Neighbouring strings
+   sit close together; a whole piano a long way flat moves them together. */
+const WRONG_KEY_CENTS = 50;
+/* Above this key a note may show too few partials to give its own stiffness.
+   It is measured again from the same sound with one lent from the notes just
+   below, which playing upward has always measured by then. */
+const LEND_B_FROM = 52;
+/* Notes this high that still cannot be measured are passed by after this many
+   tries; their targets come from the notes below. C8 usually shows only its
+   fundamental. */
+const TOP_GIVE_UP_FROM = 80;
+const TOP_ATTEMPTS = 2;
 
 /* Peak level a capture must reach to have been a struck note.
    The onset test looks for a rise above the floor, which a chair, a pedal or
@@ -471,7 +497,6 @@ const STRIKE_PEAK_DBFS = -42;
    pass comes back for it later with a stiffness borrowed from its neighbours. */
 const ATTEMPTS_PER_NOTE = 3;
 const SETTLE_SECONDS = 1.5;
-const EXTRA_NOTES = 5;      // beyond the anchors, chosen by the engine
 const STORE_KEY = "stiffstring.pianos";
 
 /* The meter. Half a second is what the engine was graded on: long enough for
@@ -538,7 +563,7 @@ const S = {
   sampleRate:0, running:false,
   ring:null, ringLen:0, ringPos:0,
   armed:false, armedAt:0, capturing:false, capturedAt:0, capturedNeeded:0, captureStart:0,
-  floorDb:-90, peakHold:0,
+  floorDb:-90, levelDb:-90, peakHold:0, captureLen:0,
   piano:null, mode:"measure", solvedOnce:false,
   plan:[], index:0, results:new Map(), attempts:new Map(), lastKey:null,
   secondPass:false, curve:null,
@@ -710,14 +735,17 @@ function onSamples(block){
     if (S.capturedNeeded <= 0){ S.capturing = false; finishCapture(); }
     return;
   }
+  const before = S.levelDb;
+  if (Number.isFinite(rms)) S.levelDb += (rms - S.levelDb) * 0.12;
   if (!S.armed || S.index >= S.plan.length) return;
   if (performance.now() - S.armedAt < SETTLE_SECONDS * 1000) return;
   if (performance.now() - S.capturedAt < REARM_SECONDS * 1000) return;
 
-  if (rms > S.floorDb + ONSET_RISE_DB && rms > ONSET_FLOOR_DB){
+  if (rms > S.floorDb + ONSET_RISE_DB && rms > ONSET_FLOOR_DB && rms > before + ONSET_JUMP_DB){
     S.capturing = true;
     S.captureKey = S.plan[S.index];
-    S.capturedNeeded = Math.ceil(S.sampleRate * CAPTURE_SECONDS);
+    S.captureLen = captureSecondsFor(S.captureKey);
+    S.capturedNeeded = Math.ceil(S.sampleRate * S.captureLen);
     S.captureStart = (S.ringPos - Math.ceil(S.sampleRate * PREROLL_SECONDS) - block.length + S.ringLen * 2) % S.ringLen;
     $("#prompt").textContent = "Listening — let it ring";
   }
@@ -785,7 +813,8 @@ async function beginNewPiano(){
   showScreen("piano");
   S.mode = "measure";
   try { await ensureEngine(); } catch(e){ /* reported by startMic */ }
-  if (S.engine) S.plan = S.engine.anchorKeys().map(k => Math.round(k));
+  // Every key, A0 upward: nothing to look for, just the next key up.
+  S.plan = Array.from({ length: 88 }, (_, i) => i + 1);
   savePiano();
   refresh();
   // Straight on to listening: the tap on Start measuring is the gesture the
@@ -927,8 +956,10 @@ function currentKey(){
 }
 
 /* ======================= measuring ======================= */
+const captureSecondsFor = key => key <= CAPTURE_BASS_TO ? CAPTURE_BASS_SECONDS : CAPTURE_MAIN_SECONDS;
+
 function grabCapture(){
-  const total = Math.ceil(S.sampleRate * (CAPTURE_SECONDS + PREROLL_SECONDS));
+  const total = Math.ceil(S.sampleRate * ((S.captureLen || CAPTURE_SECONDS) + PREROLL_SECONDS));
   const out = new Float32Array(total);
   for (let i = 0; i < total; i++) out[i] = S.ring[(S.captureStart + i) % S.ringLen];
   return out;
@@ -971,7 +1002,20 @@ function finishCapture(){
   // Yield first so the screen repaints before the engine takes the thread.
   setTimeout(() => {
     if (!captureStillWanted(key)) return;
-    const m = S.engine.measureNote(audio, S.sampleRate, hintFor(key));
+    let m = S.engine.measureNote(audio, S.sampleRate, hintFor(key));
+    // Too few partials for its own stiffness: try the same sound again with
+    // one lent from below, rather than asking for the note again.
+    if (!m && key >= LEND_B_FROM){
+      const b = lentStiffness(key);
+      if (b) m = S.engine.measureNote(audio, S.sampleRate, hintFor(key), b);
+    }
+    const wrong = m ? wrongKey(key, m.f0) : null;
+    if (wrong){
+      kv($("#lastResult"), [[keyName(key), "that sounded like " + keyName(wrong) + " — play " + keyName(key), "bad"]]);
+      S.capturedAt = performance.now();
+      advance();
+      return;
+    }
     // Re-arm from the moment we are listening again, not from before a
     // measurement that holds the thread for a few hundred milliseconds.
     S.capturedAt = performance.now();
@@ -983,21 +1027,61 @@ function finishCapture(){
   }, 0);
 }
 
+/* The stiffness to lend a note too high to show its own: a straight line
+   through log B of the measured notes in the two and a half octaves below it.
+   Stiffness climbs smoothly up the treble, so the line is a fair guess, and a
+   wrong guess costs little: it moves a top note's pitch, not the tuning curve. */
+function lentStiffness(key){
+  const pts = [...S.results.values()]
+    .filter(r => r.ok && r.key < key && r.key >= key - 30 && r.b > 0)
+    .map(r => [r.key, Math.log(r.b)]);
+  if (!pts.length) return 0;
+  if (pts.length < 3) return Math.exp(pts[pts.length-1][1]);
+  const mx = pts.reduce((a, p) => a + p[0], 0) / pts.length;
+  const my = pts.reduce((a, p) => a + p[1], 0) / pts.length;
+  let sxy = 0, sxx = 0;
+  for (const [x, y] of pts){ sxy += (x - mx) * (y - my); sxx += (x - mx) * (x - mx); }
+  return Math.exp(my + (sxx > 0 ? sxy / sxx : 0) * (key - mx));
+}
+
+/* Whether a measurement is really a different key, judged against the nearest
+   measured note below (within a few keys) or, failing that, the whole piano. */
+function wrongKey(key, f0){
+  const offsets = [...S.results.values()].filter(r => r.ok);
+  if (offsets.length < 3) return null;
+  let ref = null;
+  for (let k = key - 1; k >= key - 4 && ref === null; k--){
+    const r = S.results.get(k);
+    if (r && r.ok) ref = r.offsetCents;
+  }
+  if (ref === null) ref = median(offsets.map(r => r.offsetCents));
+  const off = cents(S.engine.keyNominalHz(key, 440), f0) - ref;
+  if (Math.abs(off) <= WRONG_KEY_CENTS) return null;
+  const k = key + Math.round(off / 100);
+  return k >= 1 && k <= 88 && k !== key ? k : null;
+}
+
 /* Returns whether the pass should move on from this note. */
 function recordResult(key, m){
   S.lastKey = key;
   if (!m){
     const tries = (S.attempts.get(key) || 0) + 1;
     S.attempts.set(key, tries);
+    if (key >= TOP_GIVE_UP_FROM && tries >= TOP_ATTEMPTS){
+      S.results.set(key, { key, ok:false });
+      kv($("#lastResult"), [[keyName(key),
+        "too few partials to measure up here — its target will come from the notes below", "warn"]]);
+      return true;
+    }
     if (tries < ATTEMPTS_PER_NOTE){
       kv($("#lastResult"), [[keyName(key),
         "nothing measurable in that — play it again, firmly (try " + tries +
-        " of " + ATTEMPTS_PER_NOTE + ")", "bad"]]);
+        " of " + (key >= TOP_GIVE_UP_FROM ? TOP_ATTEMPTS : ATTEMPTS_PER_NOTE) + ")", "bad"]]);
       return false;
     }
     S.results.set(key, { key, ok:false });
     kv($("#lastResult"), [[keyName(key),
-      "could not measure it after " + tries + " tries — coming back to this one", "bad"]]);
+      "could not measure it after " + tries + " tries — moving on; tap it later to try again", "bad"]]);
     return true;
   }
   S.attempts.delete(key);
@@ -1033,27 +1117,9 @@ function advance(){
 
   if (S.index < S.plan.length){ refresh(); centerOn(currentKey(), true); return; }
 
-  // Anchors done: let the engine ask for whatever would help most, then go back
-  // for anything it could not measure, this time lending it a stiffness.
-  const samples = usableSamples();
-  if (!S.secondPass && samples.length >= 4){
-    for (let i = 0; i < EXTRA_NOTES; i++){
-      const next = S.engine.suggestNextKey(usableSamples());
-      if (!next || S.results.has(next) || S.plan.includes(next)) break;
-      S.plan.push(next);
-    }
-    if (S.index < S.plan.length){ refresh(); centerOn(currentKey(), true); return; }
-    S.secondPass = true;
-    const failed = [...S.results.values()].filter(r => !r.ok).map(r => r.key);
-    if (failed.length){
-      S.plan.push(...failed);
-      failed.forEach(k => { S.results.delete(k); S.attempts.delete(k); });
-      refresh();
-      $("#prompt").textContent = "These need another try";
-      centerOn(currentKey(), true);
-      return;
-    }
-  }
+  // Top of the keyboard reached: every key has been asked for once. Anything
+  // that could not be measured gets its target from its neighbours; a tap on
+  // its key measures it again.
   finish();
 }
 
@@ -1063,7 +1129,7 @@ function showTarget(){
   $("#btnSkip").disabled = S.index >= S.plan.length;
   const left = Math.max(0, S.plan.length - S.index);
   $("#measureCount").textContent = done + (done === 1 ? " note" : " notes") + " measured"
-    + (left ? " · " + left + " still to play" : "");
+    + (left ? " · " + left + " still to play, up to " + keyName(S.plan[S.plan.length-1]) : "");
   if (S.index >= S.plan.length){
     $("#target").textContent = S.curve ? "✓" : "done";
     $("#targetSub").textContent = S.curve

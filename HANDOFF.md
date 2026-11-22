@@ -200,9 +200,23 @@ Each of these was found the hard way. The constants involved are calibrated, not
     cargo run -p stiffstring-core --example intervals       --release -- corpus/<folder> [a4Hz]
     cargo run -p stiffstring-core --example compare_sessions --release -- corpus/<a> corpus/<b>
     cargo run -p stiffstring-core --example identify_corpus  --release -- corpus/<folder> [model folder]
+    cargo run -p stiffstring-core --example capture_length   --release -- corpus/<folder>
 
 `intervals` is the one that grades a *tuning* rather than the engine: it reports what each octave
 actually beats at, beside what the solver would have asked for.
+
+`capture_length` measures every recorded note from only its first part, cut from just before the
+blow, and compares with the whole recording. It set the measuring pass's capture lengths
+(2026-11-22): 1.2 s gives every note from F#1 up within about a cent and its stiffness within a few
+percent; the deep bass wants 1.6 s. It also showed C7 and up cannot be measured at all without a
+stiffness lent from below, which the page now does (`lentStiffness`), and that C8 usually cannot be
+measured even then. Several 2026-09-04 recordings hold a quieter strike or seconds of room before
+the real blow, which is why the cut is taken at the loudest blow, not the file start.
+
+**Measuring runs up the keyboard, every key, A0 to C8** (2026-11-22, at the owner's request: the
+old survey of ~22 scattered notes made him hunt for keys). Each note: onset (a jump of 8 dB over
+what was sounding, so the last note's tail cannot start a capture), 1.2–1.6 s captured, measured,
+checked against the note below for a wrong key, and on. About 2 s a note, under 3 minutes for 88.
 
 `identify_corpus` grades the key detector (`detect.rs`) — the "follow the key I play" feature —
 in the situations it meets at the piano: from silence, moving on from a neighbour or octave, the

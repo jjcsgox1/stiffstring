@@ -42,7 +42,7 @@ use stiffstring_core::piano::{
 /// 3: stiffness per key added to the curve output; note-choosing exposed.
 /// 4: the live meter — locking, tracking, and what to put on the display.
 /// 5: naming the key just struck, so the meter can follow the technician.
-pub const ABI_VERSION: u32 = 5;
+pub const ABI_VERSION: u32 = 6;
 
 #[no_mangle]
 pub extern "C" fn ss_abi_version() -> u32 {
@@ -134,6 +134,10 @@ const PARTIAL_STRIDE: usize = 7;
 ///                     beat rate in Hz or 0 if not beating
 /// ```
 ///
+/// `b_hint` is a stiffness to assume when the note offers too few partials to
+/// measure its own, as most of the top octave does; 0 or less means none. A
+/// note with partials enough still measures its own stiffness.
+///
 /// Returns the number of `f64`s written, or 0 if the note could not be measured
 /// or `out` is too small.
 ///
@@ -146,6 +150,7 @@ pub unsafe extern "C" fn ss_measure_note(
     len: usize,
     sample_rate: f64,
     f0_hint: f64,
+    b_hint: f64,
     out: *mut f64,
     out_len: usize,
 ) -> usize {
@@ -154,7 +159,11 @@ pub unsafe extern "C" fn ss_measure_note(
         return 0;
     }
     let audio = std::slice::from_raw_parts(samples, len);
-    let Some(m) = measure_note(audio, sample_rate, f0_hint, MeasureConfig::default()) else {
+    let cfg = MeasureConfig {
+        b_hint: (b_hint.is_finite() && b_hint > 0.0).then_some(b_hint),
+        ..MeasureConfig::default()
+    };
+    let Some(m) = measure_note(audio, sample_rate, f0_hint, cfg) else {
         return 0;
     };
 
