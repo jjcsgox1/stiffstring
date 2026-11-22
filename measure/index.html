@@ -6,27 +6,35 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#2c4123" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1d2b17" media="(prefers-color-scheme: dark)">
 <title>Stiffstring</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
-/* Light by day, dark in a dim room: the phone decides. Brass is the one accent;
-   green means on target or done, red means off. */
+/* Cream paper under a forest-green head, with a little gold. Light by day,
+   dark in a dim room: the phone decides. --brass is the working accent
+   (forest green); leaf green means on target or done, amber means close,
+   red means off. */
 :root{
-  --bg:#f3f1ec; --card:#ffffff; --card2:#f8f6f2; --line:#e3dfd6; --line2:#cfcabf;
-  --ink:#1c1e22; --dim:#6c7179; --faint:#a3a7ad;
-  --brass:#a8762a; --brass-bg:#f4e9d6; --on-brass:#ffffff;
-  --good:#2e8a5e; --good-bg:#e3f2ea; --bad:#c4473d; --bad-bg:#f8e4e1;
-  --wkey:#ffffff; --wkey-edge:#cfcabf; --bkey:#2a2d33; --dimmer:rgba(20,18,14,.38);
+  --bg:#f4efe2; --card:#ece5d3; --card2:#e5dcc6; --line:#d8ccb1; --line2:#c2b493;
+  --ink:#1f2b1b; --dim:#69705c; --faint:#a3a08c;
+  --brass:#2f4a26; --brass-bg:#e6d9b0; --on-brass:#f6f1e3;
+  --head:#2c4123; --head-ink:#f3eedd; --head-dim:#bfc8ad; --gold:#d9b75e; --gold-ink:#26361f;
+  --note:#2a4520; --warn:#a8741c; --tab:#e6d9b0;
+  --good:#4f8a33; --good-bg:#c3dca2; --leaf:#88b964; --bad:#9c2f25; --bad-bg:#f0d9cf;
+  --wkey:#fbf8f0; --wkey-edge:#bfb293; --bkey:#1e1f1a; --dimmer:rgba(30,32,20,.42);
   --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
 }
 @media (prefers-color-scheme: dark){
   :root{
-    --bg:#101319; --card:#171b23; --card2:#1d222b; --line:#2b323e; --line2:#3a4351;
-    --ink:#e7ebf2; --dim:#8b95a4; --faint:#5d6672;
-    --brass:#c9a15a; --brass-bg:#2c2618; --on-brass:#1a1409;
-    --good:#56b38a; --good-bg:#15281f; --bad:#e0685e; --bad-bg:#2e1715;
-    --wkey:#d9dce2; --wkey-edge:#8e96a3; --bkey:#0a0c10; --dimmer:rgba(0,0,0,.55);
+    --bg:#141a12; --card:#1c2419; --card2:#222c1e; --line:#2f3b2a; --line2:#3f4d38;
+    --ink:#ece6d4; --dim:#9aa08a; --faint:#646b58;
+    --brass:#a9cc86; --brass-bg:#3a3420; --on-brass:#16200f;
+    --head:#1d2b17; --head-ink:#ece6d4; --head-dim:#97a386; --gold:#d6b55e; --gold-ink:#1d2716;
+    --note:#d9e4c4; --warn:#d6a24a; --tab:#cdb468;
+    --good:#8cc46a; --good-bg:#24361b; --leaf:#6fa24c; --bad:#e07a6c; --bad-bg:#35190f;
+    --wkey:#d8d3c2; --wkey-edge:#8b8670; --bkey:#0b0d09; --dimmer:rgba(0,0,0,.55);
   }
 }
 *{box-sizing:border-box}
@@ -54,7 +62,7 @@ input:focus,select:focus{outline:none;border-color:var(--brass)}
 dl.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:0}
 dl.kv dt{font-size:13px;color:var(--dim)}
 dl.kv dd{margin:0;font-family:var(--mono);font-size:13px;font-variant-numeric:tabular-nums}
-dd.good{color:var(--good)} dd.bad{color:var(--bad)} dd.warn{color:var(--brass)}
+dd.good{color:var(--good)} dd.bad{color:var(--bad)} dd.warn{color:var(--warn)}
 
 /* ---------- screens ---------- */
 .screen{position:fixed;inset:0;display:flex;flex-direction:column;
@@ -62,9 +70,13 @@ dd.good{color:var(--good)} dd.bad{color:var(--bad)} dd.warn{color:var(--brass)}
 
 /* Home: the pianos this phone knows. */
 .home{overflow-y:auto}
-.home-in{max-width:560px;width:100%;margin:0 auto;padding:22px 16px 40px}
-.brand{font-size:26px;font-weight:600;letter-spacing:-.01em;margin:0}
-.brand-sub{color:var(--dim);font-size:14px;margin:2px 0 22px}
+.home{padding-top:0}
+.masthead{background:var(--head);color:var(--head-ink);padding:calc(env(safe-area-inset-top) + 20px) 16px 18px}
+.masthead>div{max-width:560px;margin:0 auto}
+.home-in{max-width:560px;width:100%;margin:0 auto;padding:20px 16px 40px}
+.brand{font-size:28px;font-weight:600;letter-spacing:-.01em;margin:0}
+.brand em{font-style:normal;color:var(--gold)}
+.brand-sub{color:var(--head-dim);font-size:14px;margin:2px 0 0}
 .list{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
 .list button{display:flex;width:100%;text-align:left;align-items:center;gap:12px;border:none;border-radius:0;
   border-bottom:1px solid var(--line);padding:13px 14px;background:none}
@@ -78,17 +90,20 @@ dd.good{color:var(--good)} dd.bad{color:var(--bad)} dd.warn{color:var(--brass)}
 
 /* Instrument screen: bar, mode switch, stage, keyboard. Nothing but the
    stage ever scrolls vertically. */
-.bar{display:flex;align-items:center;gap:6px;padding:8px 10px 6px;background:var(--card);border-bottom:1px solid var(--line)}
+#piano{padding-top:0}
+.bar{display:flex;align-items:center;gap:6px;padding:calc(env(safe-area-inset-top) + 8px) 10px 6px;background:var(--head);color:var(--head-ink)}
 .bar .title{flex:1;min-width:0;text-align:center}
 .bar .title b{display:block;font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.bar .title span{display:block;font-size:12px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar .title span{display:block;font-size:12px;color:var(--head-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .icon{width:38px;height:38px;padding:0;display:inline-flex;align-items:center;justify-content:center;border:none;background:none;color:var(--brass);border-radius:10px}
+.bar .icon{color:var(--head-ink)}
 .icon svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-.pitchbtn{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--brass);background:var(--brass-bg);border:none;border-radius:8px;padding:5px 7px;line-height:1.15;text-align:center}
+.pitchbtn{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--gold-ink);background:var(--gold);border:none;border-radius:8px;padding:5px 7px;line-height:1.15;text-align:center}
 .pitchbtn small{display:block;font-size:9.5px;font-weight:500;opacity:.8}
-.seg{display:flex;margin:10px 14px 0;background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:3px}
-.seg button{flex:1;border:none;background:none;border-radius:8px;padding:7px;font-size:14px;color:var(--dim)}
-.seg button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.bar button:focus-visible{outline-color:var(--gold)}
+.seg{display:flex;margin:0;background:var(--head);border:none;border-radius:0;padding:2px 14px 9px;gap:4px}
+.seg button{flex:1;border:none;background:none;border-radius:8px;padding:7px;font-size:14px;color:var(--head-dim)}
+.seg button.on{background:var(--tab);color:var(--gold-ink);font-weight:600}
 .stage{flex:1;min-height:0;overflow-y:auto;padding:12px 14px}
 .stage-in{max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:12px;min-height:100%}
 .gate{margin:auto 0;text-align:center;display:flex;flex-direction:column;gap:12px;align-items:center;padding:20px 0}
@@ -97,8 +112,8 @@ dd.good{color:var(--good)} dd.bad{color:var(--bad)} dd.warn{color:var(--brass)}
 .lbl{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--dim)}
 .head{text-align:center}
 .stagename{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--brass)}
-.bignote{font-family:var(--mono);font-size:54px;font-weight:500;line-height:1.05;letter-spacing:-.02em;transition:color .15s}
-.bignote.followed{color:var(--brass)}
+.bignote{font-family:var(--mono);font-size:54px;font-weight:600;color:var(--note);line-height:1.05;letter-spacing:-.02em;transition:color .15s}
+.bignote.followed{color:var(--good)}
 .aim{font-family:var(--mono);font-size:12px;color:var(--dim)}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
 
@@ -114,8 +129,8 @@ dd.good{color:var(--good)} dd.bad{color:var(--bad)} dd.warn{color:var(--brass)}
 /* Tune mode: two readings side by side */
 .reads{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .reads>div{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 10px 6px;text-align:center}
-.live,.held{font-family:var(--mono);font-weight:500;font-size:44px;line-height:1.05;font-variant-numeric:tabular-nums;letter-spacing:-.03em}
-.live{color:var(--faint)} .live.near{color:var(--brass)} .live.on{color:var(--good)} .live.off{color:var(--bad)} .live.stale{opacity:.4}
+.live,.held{font-family:var(--mono);font-weight:600;font-size:44px;line-height:1.05;font-variant-numeric:tabular-nums;letter-spacing:-.03em}
+.live{color:var(--faint)} .live.near{color:var(--warn)} .live.on{color:var(--good)} .live.off{color:var(--bad)} .live.stale{opacity:.4}
 .held.waiting{opacity:.35}
 .way{text-align:center;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--dim);min-height:1.4em}
 
@@ -127,18 +142,26 @@ dd.good{color:var(--good)} dd.bad{color:var(--bad)} dd.warn{color:var(--brass)}
 .rung.main .n,.rung.main .v{color:var(--brass);font-weight:600}
 .rail{position:relative;height:16px;background:var(--card2);border:1px solid var(--line);border-radius:8px}
 .rung.main .rail{border-color:var(--brass)}
-.rail .tol{position:absolute;top:0;bottom:0;background:var(--good-bg)}
+.rail .tol{position:absolute;top:0;bottom:0;background:var(--good-bg);border-radius:7px}
 .rail .zero{position:absolute;top:-3px;bottom:-3px;left:50%;width:1px;background:var(--line2)}
 .rail .bead{position:absolute;top:2px;width:10px;height:10px;margin-left:-5px;border-radius:50%;background:var(--ink)}
 .rung.main .bead{background:var(--brass)}
 .rung.stale .bead{opacity:.25} .rung.stale .v{opacity:.4}
 .rail .edge{position:absolute;top:0;font-size:10px;line-height:14px;color:var(--bad)}
+/* Strobe rows: the stripes drift right when the partial is sharp, left when
+   flat, slower as it comes in, and stand still on target. */
+.rail canvas.strobe{position:absolute;inset:0;width:100%;height:100%;border-radius:7px;display:none}
+body.rows-strobe .rail canvas.strobe{display:block}
+body.rows-strobe .rail .tol,body.rows-strobe .rail .bead,body.rows-strobe .rail .zero{display:none}
+body.rows-strobe .rail{height:20px;overflow:hidden}
+body.rows-strobe .rung.main .rail{height:30px;border-width:1.5px}
+body.rows-strobe .scale{display:none}
 .scale{display:grid;grid-template-columns:34px 1fr 52px;gap:8px;font-family:var(--mono);font-size:10px;color:var(--dim)}
 .scale span:nth-child(2){display:flex;justify-content:space-between}
 .unison{display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--card);border:1px solid var(--line);border-radius:12px;font-size:14px}
 .unison .k{flex:1;color:var(--dim)}
 .unison .x{font-family:var(--mono)}
-.unison.beating .x{color:var(--brass)} .unison.false .x{color:var(--bad)}
+.unison.beating .x{color:var(--warn)} .unison.false .x{color:var(--bad)}
 .nav{display:grid;grid-template-columns:1fr 1.4fr;gap:10px;margin-top:auto}
 .nav button{height:50px;font-family:var(--mono);font-size:16px}
 
@@ -150,18 +173,18 @@ dd.good{color:var(--good)} dd.bad{color:var(--bad)} dd.warn{color:var(--brass)}
 .kb button{position:absolute;top:0;padding:0;border-radius:0 0 6px 6px;font-family:var(--mono)}
 .kb .w{height:118px;background:var(--wkey);border:1px solid var(--wkey-edge);z-index:1}
 .kb .b{height:72px;background:var(--bkey);border:1px solid var(--bkey);z-index:2;border-radius:0 0 4px 4px}
-.kb .w .nm{position:absolute;left:0;right:0;bottom:16px;font-size:10px;color:#80858d;text-align:center}
+.kb .w .nm{position:absolute;left:0;right:0;bottom:16px;font-size:10px;color:var(--dim);text-align:center}
 .kb .mk{position:absolute;left:50%;bottom:5px;width:7px;height:7px;margin-left:-3.5px;border-radius:50%}
 .kb .b .mk{bottom:6px}
 .kb .measured .mk{background:var(--good)}
 .kb .failed .mk{background:var(--bad)}
 .kb .planned .mk{border:1.5px solid var(--brass);background:none}
 .kb .tuned .mk{background:var(--good);width:60%;left:20%;margin-left:0;height:4px;border-radius:2px}
-.kb .off .mk{background:var(--brass)}
-.kb .w.now{background:var(--brass);border-color:var(--brass)}
-.kb .w.now .nm{color:var(--on-brass)}
-.kb .b.now{background:var(--brass);border-color:var(--brass)}
-.kb .now .mk{background:var(--on-brass)!important;border-color:var(--on-brass)!important}
+.kb .off .mk{background:var(--warn)}
+.kb .w.now{background:var(--leaf);border-color:var(--leaf)}
+.kb .w.now .nm{color:var(--gold-ink);font-weight:600}
+.kb .b.now{background:var(--leaf);border-color:var(--leaf)}
+.kb .now .mk{background:var(--gold-ink)!important;border-color:var(--gold-ink)!important}
 
 /* The whole keyboard at a glance. Slide a thumb along it to travel. */
 .ov{position:relative;margin:7px 14px 0;height:22px;touch-action:none;user-select:none;-webkit-user-select:none;cursor:pointer}
@@ -169,8 +192,8 @@ dd.good{color:var(--good)} dd.bad{color:var(--bad)} dd.warn{color:var(--brass)}
 .ov .bars i{flex:1;height:8px;background:var(--line2);border-radius:1px}
 .ov .bars i.measured,.ov .bars i.tuned{height:14px;background:var(--good)}
 .ov .bars i.failed{height:14px;background:var(--bad)}
-.ov .bars i.off{height:14px;background:var(--brass)}
-.ov .bars i.now{height:22px;background:var(--brass)}
+.ov .bars i.off{height:14px;background:var(--warn)}
+.ov .bars i.now{height:22px;background:var(--leaf)}
 .ov .bars i.pick{height:22px;background:var(--ink)}
 .ov .win{position:absolute;top:-2px;bottom:-2px;border:1.5px solid var(--dim);border-radius:4px;pointer-events:none}
 .pickname{position:absolute;bottom:calc(100% + 4px);transform:translateX(-50%);background:var(--ink);color:var(--bg);font-family:var(--mono);font-size:13px;font-weight:600;padding:2px 7px;border-radius:5px;pointer-events:none;z-index:3}
@@ -191,13 +214,13 @@ th,td{text-align:right;padding:5px 7px;border-bottom:1px solid var(--line)}
 th:first-child,td:first-child{text-align:left}
 th{font-family:var(--sans);font-size:11px;color:var(--dim);font-weight:600;text-transform:uppercase;letter-spacing:.05em}
 .scroll{overflow-x:auto}
-.seg.small{margin:0 0 12px}
+.seg.small{margin:0 0 12px;border-radius:10px;padding:3px}
 
 /* Sideways on a phone: a short keyboard, and the stage in two columns so the
    readings stay on screen beside the partial rows. */
 @media (orientation:landscape) and (max-height:520px){
   .bar{padding-top:4px;padding-bottom:3px}
-  .seg{margin-top:6px} .seg button{padding:4px}
+  .seg{padding-bottom:6px} .seg button{padding:4px}
   .stage{padding:8px 14px}
   .stage-in{max-width:none;display:grid;grid-template-columns:1fr 1fr;column-gap:18px;row-gap:8px;align-content:start}
   #gate,#measureClosed{display:flex}
@@ -212,6 +235,7 @@ th{font-family:var(--sans);font-size:11px;color:var(--dim);font-weight:600;text-
   #measure .card{grid-row:1} #measure #measureCount{grid-row:2} #measure .actions{grid-row:3;margin-top:0}
   .bignote{font-size:36px} .live,.held{font-size:30px}
   .ladder{gap:3px} .nav button{height:42px}
+  body.rows-strobe .rail{height:16px} body.rows-strobe .rung.main .rail{height:22px}
   .kb{height:70px} .kb .w{height:70px} .kb .b{height:42px} .kb .w .nm{bottom:12px}
   .keys{padding-top:4px}
 }
@@ -222,9 +246,11 @@ th{font-family:var(--sans);font-size:11px;color:var(--dim);font-weight:600;text-
 
 <!-- =================== home =================== -->
 <section class="screen home" id="home">
-  <div class="home-in">
-    <h1 class="brand">Stiffstring</h1>
+  <header class="masthead"><div>
+    <h1 class="brand">Stiff<em>string</em></h1>
     <p class="brand-sub">Measures each piano, then tunes it to its own targets.</p>
+  </div></header>
+  <div class="home-in">
     <button class="primary" id="btnNewPiano" style="width:100%;height:50px">New piano</button>
     <div class="section-h">Pianos on this phone</div>
     <div class="list" id="pianoList"></div>
@@ -408,6 +434,10 @@ th{font-family:var(--sans);font-size:11px;color:var(--dim);font-weight:600;text-
             <select id="advance"><option value="1" selected>Mark it tuned</option><option value="0">Wait for me</option></select></div>
         </div>
         <p class="note" id="advanceWhy">&nbsp;</p>
+        <div><label for="rows">Partial rows</label>
+          <select id="rows"><option value="strobe" selected>Strobe &mdash; stripes stand still on target</option><option value="needle">Needle &mdash; a dot on a scale</option></select></div>
+        <p class="note">On the strobe, stripes drift right when the partial is sharp and left when it is
+          flat, slowing as it comes in. Faint stripes mean that row has not been heard for a moment.</p>
         <p class="note">Temperament first, F3 up to F4. Then on up the treble to C8, then back to E3
           and down through the bass &mdash; always the next key along, never a jump.</p>
       </div>
@@ -481,6 +511,11 @@ const FOLLOW_RISE_DB = 8;
 const FOLLOW_REARM_MS = 350;
 const FOLLOW_SECONDS = 0.34;
 const FOLLOW_KEY = "stiffstring.follow";
+const ROWS_KEY = "stiffstring.rows";
+const STROBE_PER_CENT = 0.6;  // stripes drifting by per second, for each cent off
+const STROBE_MAX = 7;         // stripes per second, the fastest the eye still follows
+const STROBE_STRIPE = 11;     // stripe width in CSS pixels
+const STROBE_EASE_S = 0.12;   // how quickly the drift follows a new reading
 
 /* How far a piano may sit from standard and still be worth pulling all the way
    up in one tuning. Beyond this it drops back before the next visit and a pitch
@@ -509,7 +544,7 @@ const S = {
   secondPass:false, curve:null,
   tuning:false, tuneKey:TEMPERAMENT_LOW, order:[], tuned:new Set(),
   lock:null, readings:[], lastReadingAt:0, insideSince:0, meterTimer:0,
-  rungs:[], rungTurn:0, ladder:new Map(), amps:[], strike:null, held:null, seen:new Map(),
+  rungs:[], rungTurn:0, ladder:new Map(), strobe:new Map(), strobePhase:new Map(), amps:[], strike:null, held:null, seen:new Map(),
   graph:"b", graphKey:null, scrubbing:false,
   recentDb:-90, followAt:0, followPending:null, followFrame:0,
 };
@@ -1331,11 +1366,13 @@ function startTuning(){
   selectKey(S.order.find(k => !S.tuned.has(k)) || TEMPERAMENT_LOW);
   centerOn(S.tuneKey, false);
   meterTick();
+  startStrobe();
 }
 
 function stopTuningMeter(){
   S.tuning = false;
   clearTimeout(S.meterTimer);
+  stopStrobe();
   S.lock = null;
   S.readings = [];
 }
@@ -1365,6 +1402,7 @@ function selectKey(key){
   S.insideSince = 0;
   S.lastReadingAt = 0;
   S.ladder = new Map();
+  S.strobe = new Map();
   S.amps = [];
   S.strike = null;
   S.held = null;
@@ -1600,7 +1638,7 @@ function buildLadder(){
     row.className = "rung stale";
     row.dataset.n = String(n);
     row.innerHTML = '<span class="n">' + ORD(n) + '</span>'
-      + '<span class="rail"><i class="tol"></i><i class="zero"></i><i class="bead"></i></span>'
+      + '<span class="rail"><canvas class="strobe"></canvas><i class="tol"></i><i class="zero"></i><i class="bead"></i></span>'
       + '<span class="v">—</span>';
     box.appendChild(row);
   }
@@ -1625,6 +1663,12 @@ function paintLadder(now){
     }
     row.classList.toggle("main", !!main);
     row.classList.toggle("stale", c === null || !fresh);
+    // The strobe drifts from the newest reading, not the steadied number:
+    // it is what the eye follows while the pin is turning.
+    let live = c;
+    if (main && S.readings.length) live = S.readings[S.readings.length-1].cents;
+    else if (!main && S.ladder.has(n)){ const h = S.ladder.get(n).hist; live = h[h.length-1]; }
+    S.strobe.set(n, { c: live, fresh: c !== null && fresh, main: !!main, inside: c !== null && Math.abs(c) <= tol });
     const bead = row.querySelector(".bead");
     const v = row.querySelector(".v");
     let edge = row.querySelector(".edge");
@@ -1641,6 +1685,62 @@ function paintLadder(now){
     } else if (edge) edge.remove();
   }
 }
+
+/* ---------- strobe ----------
+   Drawn every frame between readings, so the drift is smooth even though the
+   meter reads only a few times a second. Each row keeps its own phase. */
+let strobeRaf = 0, strobeLast = 0;
+const strobeOn = () => document.body.classList.contains("rows-strobe");
+function startStrobe(){
+  stopStrobe();
+  S.strobe = new Map();
+  S.strobePhase = new Map();
+  strobeLast = performance.now();
+  strobeRaf = requestAnimationFrame(drawStrobe);
+}
+function stopStrobe(){ if (strobeRaf) cancelAnimationFrame(strobeRaf); strobeRaf = 0; }
+function drawStrobe(now){
+  strobeRaf = requestAnimationFrame(drawStrobe);
+  const dt = Math.min(0.1, (now - strobeLast) / 1000);
+  strobeLast = now;
+  if (!strobeOn() || S.mode !== "tune") return;
+  const ink = css("--ink"), good = css("--good"), card = css("--card2"), main = css("--brass");
+  const dpr = window.devicePixelRatio || 1;
+  for (const row of $("#ladder").children){
+    const n = Number(row.dataset.n);
+    const cv = row.querySelector("canvas.strobe");
+    if (!n || !cv) continue;
+    const w = Math.round(cv.clientWidth * dpr), h = Math.round(cv.clientHeight * dpr);
+    if (!w || !h) continue;
+    if (cv.width !== w || cv.height !== h){ cv.width = w; cv.height = h; }
+    const st = S.strobe.get(n);
+    const ph = S.strobePhase.get(n) || { x: 0, v: 0, a: 0 };
+    let want = 0, alpha = 0.12;
+    if (st && st.c !== null && st.c !== undefined){
+      const sp = Math.min(STROBE_MAX, Math.abs(st.c) * STROBE_PER_CENT);
+      want = st.fresh ? Math.sign(st.c) * sp : 0;
+      alpha = st.fresh ? 1 : 0.22;
+    }
+    const k = 1 - Math.exp(-dt / STROBE_EASE_S);
+    ph.v += (want - ph.v) * k;
+    ph.a += (alpha - ph.a) * k;
+    ph.x = (ph.x + ph.v * dt) % 1;
+    S.strobePhase.set(n, ph);
+
+    const g = cv.getContext("2d");
+    g.fillStyle = card;
+    g.fillRect(0, 0, w, h);
+    const stripe = STROBE_STRIPE * dpr * (st && st.main ? 1.25 : 1);
+    const period = stripe * 2;
+    g.globalAlpha = ph.a;
+    g.fillStyle = st && st.inside && st.fresh ? good : (st && st.main ? main : ink);
+    let x0 = (ph.x * period) % period - period;
+    for (let x = x0; x < w; x += period) g.fillRect(Math.round(x), 0, Math.round(stripe), h);
+    g.globalAlpha = 1;
+  }
+}
+
+function applyRows(){ document.body.classList.toggle("rows-strobe", $("#rows").value === "strobe"); }
 
 function stringsFor(key){
   if (key <= S.piano.single) return 1;
@@ -1880,6 +1980,12 @@ function explainAdvance(){
     : "Mark it tuned: a note that holds in tune turns green and the screen moves to the next key along.";
 }
 try { const f = localStorage.getItem(FOLLOW_KEY); if (f === "0" || f === "1") $("#follow").value = f; } catch(e){}
+try { const r = localStorage.getItem(ROWS_KEY); if (r === "strobe" || r === "needle") $("#rows").value = r; } catch(e){}
+applyRows();
+$("#rows").addEventListener("change", () => {
+  applyRows();
+  try { localStorage.setItem(ROWS_KEY, $("#rows").value); } catch(e){}
+});
 $("#follow").addEventListener("change", () => {
   try { localStorage.setItem(FOLLOW_KEY, $("#follow").value); } catch(e){}
   S.followPending = null;
