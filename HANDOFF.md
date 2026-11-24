@@ -259,3 +259,23 @@ Unmeasured keys take the line between measured neighbours. The meter, strobe row
 following all read against the aim; the tuning screen states the overpull and what a 440 tuner
 will show. Switching it on or off clears the ticks (a fresh pass), and turning it on moves the
 reference to 440. Code: `computeRaise`, `aimHz`, `changeRaise` in measure/index.html.
+
+**Bass octaves (owner field report, 2026-11-23).** The owner's m3–M6 checks did not beat evenly
+in the low bass. The m3–M6 test is a 6:3 test (L–T m3 and T–U M6 share T's 5th partial, so they
+beat equally exactly when L6 = U3), and the solver's bass sits between 4:2 and 6:3 — about 1.3
+beats/s narrow of 6:3 at partial 6 on the home grand (`--example intervals`). New setting in the
+pitch sheet, `#bass`: 6:3 (default for new pianos), 4:2, or the solver's balance (what pianos saved
+before this get, so their targets do not move). `layBass` lays E3 down to A0 as pure octaves from
+the note above, using the curve's own B for both notes. On the home grand's 09-06 stiffness, 6:3
+puts A0 at −40.8¢ against −14.7¢ balanced; the E3–F3 join is 1.6¢. Done in the page, not the Rust
+solver, so no ABI change.
+
+**Meter delay.** The reading window is now 50 cycles of the followed partial, 0.2–0.5 s (was a
+fixed 0.5 s), the display median is over 3 readings (was 8), and updates come every 40 ms or 1.8×
+the cost. On the 09-06 recordings 0.2 s was as steady as 0.5 s from the tenor up; C2 at 0.2 s
+jumped ~7¢ between updates, hence the cycles rule. "Held after strike" follows the window.
+
+**Wrong key at ±100¢.** When following misses a blow, the meter (searching ±150¢) reads the new
+string as the old key a semitone out. `neighbourFor` checks any reading 45¢+ out against where
+keys ±1, ±2 are expected (`expectCents`); if one explains it within 35¢ and 30¢ better, it follows
+there after 2 updates, or says "That sounds like X" when following is off.

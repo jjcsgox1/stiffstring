@@ -388,6 +388,11 @@ th{font-family:var(--sans);font-size:11px;color:var(--dim);font-weight:600;text-
           <select id="stretch">
             <option value="0.85">Gentler</option><option value="1" selected>As measured</option><option value="1.15">Wider</option>
           </select></div>
+        <div><label for="bass">Bass octaves</label>
+          <select id="bass">
+            <option value="63" selected>6:3 &mdash; the m3&ndash;M6 test</option><option value="42">4:2 &mdash; the M3&ndash;M10 test</option><option value="auto">Balanced by the app</option>
+          </select></div>
+        <p class="note" id="bassWhy">&nbsp;</p>
         <p class="note hidden" id="pitchLocked">Locked: notes have been tuned to these settings, and a note already tuned must never move.</p>
       </div>
       <div class="card stack">
@@ -511,11 +516,19 @@ const ATTEMPTS_PER_NOTE = 3;
 const SETTLE_SECONDS = 1.5;
 const STORE_KEY = "stiffstring.pianos";
 
-/* The meter. Half a second is what the engine was graded on: long enough for
-   the phase fit to be precise, short enough to follow the string. */
-const METER_SECONDS = 0.5;
-const METER_MIN_MS = 70;
-const METER_HISTORY = 8;    // readings the display holds a median over
+/* The meter. How much audio each reading looks at is the delay the technician
+   feels: the number describes the middle of that window. A fixed half second
+   was what the engine was first graded on, and it is more than most of the
+   keyboard needs. On the home grand's recordings, the reading from one update
+   to the next moved no more at 0.2 s than at 0.5 s from the tenor up, while the
+   bass — following a partial near 100 Hz — needed about fifty cycles of it
+   before the number stopped jumping by several cents. So the window is fifty
+   cycles of the partial being followed, between 0.2 and 0.5 s. */
+const METER_CYCLES = 50;
+const METER_MIN_S = 0.2;
+const METER_MAX_S = 0.5;
+const METER_MIN_MS = 40;
+const METER_HISTORY = 3;    // readings the display holds a median over: enough to step over one bad one
 const METER_LOST_MS = 700;  // silence this long and the lock is let go
 const METER_STALE_MS = 350; // no fresh reading: dim the number, do not blank it
 const SETTLE_MS = 1200;     // how long a note must hold before it counts as done
@@ -536,8 +549,10 @@ const RUNG_DISAGREE_CENTS = 25;
 /* Amplitude ratio over the recent minimum. Well clear of what a beating unison
    does to the level on its own, which would otherwise read as a blow per beat. */
 const STRIKE_RISE = 2.5;
-const HELD_FROM_S = 0.55;
-const HELD_TO_S = 1.3;
+/* Measured from the blow: the first window wholly after it, then most of a
+   second more. Both follow the meter's window, which depends on the note. */
+const HELD_AFTER_WINDOW_S = 0.05;
+const HELD_SPAN_S = 0.75;
 
 /* Following the key played. A blow is a jump in level over the last moment's
    level — not over the long-term floor, which a room full of ringing strings
@@ -620,7 +635,7 @@ function changeRaise(){
     const ok = confirm("Start a fresh pass? The " + S.tuned.size + " ticked notes will be cleared, because they were tuned to different aims.");
     if (ok){
       S.tuned = new Set();
-      $("#a4").disabled = false; $("#stretch").disabled = false;
+      $("#a4").disabled = false; $("#stretch").disabled = false; $("#bass").disabled = false;
       $("#pitchLocked").classList.add("hidden");
     }
   }
@@ -642,6 +657,42 @@ function changeRaise(){
    for the plate. */
 const TEMPERAMENT_LOW = 33;   // F3
 const TEMPERAMENT_HIGH = 45;  // F4
+
+/* Bass octaves, laid the way they are tuned by ear: from the bottom of the
+   temperament down, each note set as an octave below the one already done,
+   with that octave pure at the chosen partials. 6:3 is what the m3–M6 test
+   checks — F3–A♭3 (m3) and A♭3–F4 (M6) both beat against A♭3's 5th partial,
+   so they beat equally exactly when partial 6 of F3 sits on partial 3 of F4 — so on 6:3
+   that test beats evenly all the way to A0. Each octave uses both strings' own
+   stiffness from the curve, which is what makes it wider than 2:1.
+
+   "Balanced by the app" leaves the solver's bass alone. On the home grand that
+   came out between 4:2 and 6:3, narrow of 6:3 by about 1.3 beats a second at
+   partial 6 in every bass octave, which is what the m3–M6 test was hearing. */
+const BASS_FROM = TEMPERAMENT_LOW - 1;   // E3 and down
+const BASS_PAIRS = { "63": [6, 3], "42": [4, 2] };
+function layBass(curve, a4){
+  const pair = BASS_PAIRS[$("#bass").value];
+  if (!pair) return curve;
+  const [m, n] = pair;
+  const hz = curve.hz.slice(), cs = curve.cents.slice(), b = curve.b;
+  for (let k = BASS_FROM; k >= 1; k--){
+    const up = hz[k + 11], bl = b[k-1], bu = b[k + 11];
+    // m·fL·√(1 + B_L·m²) = n·fU·√(1 + B_U·n²)
+    hz[k-1] = up * (n / m) * Math.sqrt((1 + bu * n * n) / (1 + bl * m * m));
+    cs[k-1] = cents(a4 * Math.pow(2, (k - 49) / 12), hz[k-1]);
+  }
+  return Object.assign({}, curve, { hz, cents: cs });
+}
+
+function explainBass(){
+  const v = $("#bass").value;
+  $("#bassWhy").textContent = v === "auto"
+    ? "The app balances every interval in the bass. Narrower than 6:3: the m3–M6 test will not beat evenly down there."
+    : "From E3 down to A0, each note is a pure " + (v === "63" ? "6:3" : "4:2") + " octave below the one above it, "
+      + "using both strings' own stiffness — so the " + (v === "63" ? "m3–M6" : "M3–M10")
+      + " test beats evenly all the way down.";
+}
 
 /* The keyboard, drawn to scale: 52 white keys at this width scroll sideways. */
 const WHITE_W = 36;
@@ -884,6 +935,7 @@ function resetPianoState(){
   S.tuned = new Set(); S.seen = new Map(); S.order = tuningOrder(); S.tuneKey = TEMPERAMENT_LOW;
   S.graphKey = null;
   $("#a4").innerHTML = ""; $("#a4").disabled = false; $("#stretch").disabled = false; $("#stretch").value = "1";
+  $("#bass").disabled = false; $("#bass").value = "63";
   $("#raise").value = "0"; $("#raiseCap").value = "10"; S.raise = null;
   kv($("#lastResult"), [["Last note", "none yet"]]);
   $("#btnRedo").disabled = true;
@@ -934,6 +986,7 @@ async function openPiano(p){
   if (S.engine && usableSamples().length >= 4){
     buildPitchOptions(p.a4);
     $("#stretch").value = String(p.stretch || 1);
+    $("#bass").value = p.bass || "auto";
     $("#raise").value = p.raise && p.raise.on ? "1" : "0";
     $("#raiseCap").value = String(p.raise && p.raise.cap || 10);
     S.solvedOnce = true;
@@ -954,6 +1007,7 @@ function pianoRecord(){
     stringing: { single: S.piano.single, double: S.piano.double },
     a4: Number($("#a4").value) || 440,
     stretch: Number($("#stretch").value),
+    bass: $("#bass").value,
     raise: { on: $("#raise").value === "1", cap: Number($("#raiseCap").value) },
     samples: usableSamples(),
     tuned: [...S.tuned],
@@ -1311,7 +1365,9 @@ function solve(){
   const samples = usableSamples();
   const a4 = Number($("#a4").value) || 440;
   const stretch = Number($("#stretch").value);
-  const curve = S.engine.solveCurve(samples, { a4Hz:a4, stretch });
+  const solved = S.engine.solveCurve(samples, { a4Hz:a4, stretch });
+  const curve = solved && layBass(solved, a4);
+  explainBass();
   if (!curve){ $("#pitchWhy").textContent = "Could not solve a tuning from these notes."; return; }
   S.curve = curve;
   computeRaise();
@@ -1327,6 +1383,7 @@ function solve(){
     ["Reference", a4.toFixed(1) + " Hz   " + signed(fromStandard) + "¢ from 440"],
     ["Against a 440 tuner", "F3 reads " + signed(f3) + "¢, A4 reads " + signed(fromStandard) + "¢"],
     ["Notes measured", String(samples.length)],
+    ["Bass octaves", $("#bass").value === "auto" ? "balanced by the app" : ($("#bass").value === "63" ? "6:3" : "4:2") + " from E3 down"],
     ["Bass break", curve.breakKey ? keyName(curve.breakKey) + " (key " + curve.breakKey + ")" : "none found"],
     ["Model spread", (Math.pow(10, curve.rmsLog10) * 100 - 100).toFixed(0) + "% in stiffness"],
     ["A0", signed(curve.cents[0]) + "¢   " + curve.hz[0].toFixed(2) + " Hz"],
@@ -1344,7 +1401,7 @@ function solve(){
     tb.appendChild(tr);
   }
   const locked = S.tuned.size > 0;
-  $("#a4").disabled = locked; $("#stretch").disabled = locked;
+  $("#a4").disabled = locked; $("#stretch").disabled = locked; $("#bass").disabled = locked;
   $("#pitchLocked").classList.toggle("hidden", !locked);
   if (!$("#sheetGraphs").classList.contains("hidden")) drawGraph();
   if (S.tuning) selectKey(S.tuneKey);
@@ -1538,6 +1595,14 @@ function stopTuningMeter(){
   S.readings = [];
 }
 
+/* Seconds of audio per reading, from the partial being followed — or before
+   anything is followed, the lowest one the meter could follow. */
+function meterWindow(key, b){
+  let hz = S.lock ? S.lock.hz : 0;
+  if (!hz) for (let n = 1; n <= 8 && hz < 90; n++) hz = n * aimHz(key) * Math.sqrt(1 + b * n * n);
+  return Math.max(METER_MIN_S, Math.min(METER_MAX_S, METER_CYCLES / hz));
+}
+
 /* Where partial n of this key should sit if the note were exactly on target. */
 const partialTarget = (key, n) => {
   const f0 = aimHz(key), b = S.curve.b[key-1];
@@ -1608,7 +1673,7 @@ function nextInOrder(from){
 function markDone(){
   S.tuned.add(S.tuneKey);
   // The reference and the stretch lock as soon as anything is tuned to them.
-  $("#a4").disabled = true; $("#stretch").disabled = true;
+  $("#a4").disabled = true; $("#stretch").disabled = true; $("#bass").disabled = true;
   $("#pitchLocked").classList.remove("hidden");
   savePiano();
   selectKey(nextInOrder(S.tuneKey));
@@ -1621,7 +1686,7 @@ function markDone(){
 function markTunedHere(){
   if (S.tuned.has(S.tuneKey)) return;
   S.tuned.add(S.tuneKey);
-  $("#a4").disabled = true; $("#stretch").disabled = true;
+  $("#a4").disabled = true; $("#stretch").disabled = true; $("#bass").disabled = true;
   $("#pitchLocked").classList.remove("hidden");
   $("#tuneStage").textContent = sectionLabel(S.tuneKey);
   savePiano();
@@ -1692,13 +1757,44 @@ function runFollow(p){
   const d = S.engine.identify(buf, n, S.sampleRate, S.curve, expectCents(), S.tuneKey);
   if (!d) return;
   S.lastFollow = d;
-  if (d.decision === "switch" && d.keyToTune && d.keyToTune !== S.tuneKey){
-    selectKey(d.keyToTune);
-    centerOn(d.keyToTune, true);
-    const name = $("#tuneNote");
-    name.classList.add("followed");
-    setTimeout(() => name.classList.remove("followed"), 600);
+  if (d.decision === "switch" && d.keyToTune && d.keyToTune !== S.tuneKey) followTo(d.keyToTune);
+}
+
+function followTo(key){
+  selectKey(key);
+  centerOn(key, true);
+  const name = $("#tuneNote");
+  name.classList.add("followed");
+  setTimeout(() => name.classList.remove("followed"), 600);
+}
+
+/* The meter's own check on which key is sounding.
+
+   Following decides from the moment of the blow, and sometimes it does not
+   decide at all — a key struck again while it is still ringing loud barely
+   rises, and a quick run of keys can land inside the moment it is busy. Then
+   the screen stays on the last key, the meter (which searches a semitone and a
+   half either side so a badly out string still shows) finds the new string,
+   and reports it as the old key a hundred cents out.
+
+   A steady reading that far out is checked against where each neighbour is
+   expected to sit — its measured place, or its aim once tuned. If one of them
+   explains it far better than the key on screen does, that is the key. */
+const NEIGHBOUR_FROM_CENTS = 45;  // closer than this, it is a string being tuned
+const NEIGHBOUR_FIT_CENTS = 35;   // the neighbour must explain it this well
+const NEIGHBOUR_MARGIN_CENTS = 30; // and this much better than the key on screen
+const NEIGHBOUR_TICKS = 2;        // on this many updates in a row
+function neighbourFor(key, c){
+  const f0 = aimHz(key) * Math.pow(2, c / 1200);
+  const expect = expectCents();
+  const miss = k => Math.abs(cents(S.curve.hz[k-1], f0) - expect[k-1]);
+  let best = 0, bestMiss = Infinity;
+  for (const k of [key - 2, key - 1, key + 1, key + 2]){
+    if (k < 1 || k > 88) continue;
+    const m = miss(k);
+    if (m < bestMiss){ best = k; bestMiss = m; }
   }
+  return best && bestMiss <= NEIGHBOUR_FIT_CENTS && miss(key) - bestMiss >= NEIGHBOUR_MARGIN_CENTS ? best : 0;
 }
 
 function meterTick(){
@@ -1714,7 +1810,8 @@ function meterTick(){
   const key = S.tuneKey;
   const target = aimHz(key);
   const b = S.curve.b[key-1];
-  const audio = recentAudio(METER_SECONDS);
+  S.meterWin = meterWindow(key, b);
+  const audio = recentAudio(S.meterWin);
 
   if (!S.lock){
     const l = S.engine.lockNote(audio, S.sampleRate, target, b);
@@ -1748,7 +1845,7 @@ function meterTick(){
   // The interval follows what the work actually costs, so a slower phone gets a
   // slower meter rather than a stalled one.
   const cost = performance.now() - began;
-  S.meterTimer = setTimeout(meterTick, Math.max(METER_MIN_MS, cost * 2.5));
+  S.meterTimer = setTimeout(meterTick, Math.max(METER_MIN_MS, cost * 1.8));
 }
 
 /* Watch the followed partial's level for a fresh blow, and once the window just
@@ -1761,8 +1858,9 @@ function noteStrike(r, now){
 
   if (!S.strike) return;
   const age = (now - S.strike.at) / 1000;
-  if (age >= HELD_FROM_S && age <= HELD_TO_S) S.strike.readings.push(r);
-  if (age > HELD_TO_S){
+  const from = (S.meterWin || METER_MAX_S) + HELD_AFTER_WINDOW_S, to = from + HELD_SPAN_S;
+  if (age >= from && age <= to) S.strike.readings.push(r);
+  if (age > to){
     const s = S.strike.readings.length >= 2 ? S.engine.settle(S.strike.readings) : null;
     if (s) S.held = s.cents;
     S.strike = null;
@@ -1953,6 +2051,22 @@ function paintMeter(now){
   }
 
   const c = s.cents;
+  const other = Math.abs(c) >= NEIGHBOUR_FROM_CENTS ? neighbourFor(S.tuneKey, c) : 0;
+  S.neighbourTicks = other ? (S.neighbourTicks || 0) + 1 : 0;
+  if (other && following() && S.neighbourTicks >= NEIGHBOUR_TICKS){
+    S.neighbourTicks = 0;
+    followTo(other);
+    return;
+  }
+  if (other){
+    // Not following, or not sure yet: say so instead of a number that means
+    // nothing about the key on screen.
+    el.textContent = "—";
+    el.className = "live off";
+    $("#tuneWay").textContent = "That sounds like " + keyName(other) + (following() ? "" : " — tap it to tune it");
+    S.insideSince = 0;
+    return;
+  }
   const before = S.seen.get(S.tuneKey);
   S.seen.set(S.tuneKey, c);
   if (before === undefined || (Math.abs(before) > tol * 3) !== (Math.abs(c) > tol * 3)) renderKeyboard();
@@ -2132,6 +2246,7 @@ $("#btnFinish").addEventListener("click", () => { S.capturing = false; S.index =
 
 $("#a4").addEventListener("change", solve);
 $("#stretch").addEventListener("change", solve);
+$("#bass").addEventListener("change", solve);
 $("#raise").addEventListener("change", changeRaise);
 $("#raiseCap").addEventListener("change", changeRaise);
 $("#btnDone").addEventListener("click", markDone);
