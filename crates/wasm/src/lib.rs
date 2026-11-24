@@ -30,7 +30,7 @@ use std::alloc::{alloc, dealloc, Layout};
 use stiffstring_core::curve::{solve, CurveConfig};
 use stiffstring_core::detect::{identify, Decision, Keyboard};
 use stiffstring_core::inharmonicity::{measure_note, Concern, MeasureConfig};
-use stiffstring_core::meter::{lock_note, settle, track, Reading};
+use stiffstring_core::meter::{lock_note_band, settle, track, Reading};
 use stiffstring_core::piano::{
     anchor_keys, fit_model, key_nominal_hz, suggest_next_key, NoteSample, KEYS,
 };
@@ -42,7 +42,8 @@ use stiffstring_core::piano::{
 /// 3: stiffness per key added to the curve output; note-choosing exposed.
 /// 4: the live meter — locking, tracking, and what to put on the display.
 /// 5: naming the key just struck, so the meter can follow the technician.
-pub const ABI_VERSION: u32 = 6;
+/// 7: locking searches a band the caller gives, not a fixed width.
+pub const ABI_VERSION: u32 = 7;
 
 #[no_mangle]
 pub extern "C" fn ss_abi_version() -> u32 {
@@ -228,6 +229,8 @@ pub unsafe extern "C" fn ss_lock_note(
     sample_rate: f64,
     target_f0: f64,
     b: f64,
+    lo_cents: f64,
+    hi_cents: f64,
     out: *mut f64,
     out_len: usize,
 ) -> usize {
@@ -235,7 +238,7 @@ pub unsafe extern "C" fn ss_lock_note(
         return 0;
     }
     let audio = std::slice::from_raw_parts(samples, len);
-    let Some(l) = lock_note(audio, sample_rate, target_f0, b) else {
+    let Some(l) = lock_note_band(audio, sample_rate, target_f0, b, lo_cents, hi_cents) else {
         return 0;
     };
     let dst = std::slice::from_raw_parts_mut(out, 6);

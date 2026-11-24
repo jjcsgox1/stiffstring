@@ -187,6 +187,30 @@ fn refine_config(block_len: usize) -> Option<RefineConfig> {
 /// [`SEARCH_CENTS`] from its target, which a caller should report as nothing to
 /// measure rather than as a failure.
 pub fn lock_note(samples: &[f32], sample_rate: f64, target_f0: f64, b: f64) -> Option<Lock> {
+    lock_note_band(samples, sample_rate, target_f0, b, -SEARCH_CENTS, SEARCH_CENTS)
+}
+
+/// [`lock_note`], looking only between `lo_cents` and `hi_cents` of the target.
+///
+/// The full search takes the loudest peak within a semitone and a half, and the
+/// loudest is not always ours. A key struck a moment ago is still ringing when
+/// the technician moves to the one beside it — or taps back to the one before —
+/// and at a semitone away it sits inside that search, often louder than the
+/// string just struck. Followed, it reads as the key on screen a hundred cents
+/// out. The caller knows where this string should be — its measured place, or
+/// its target once tuned — so it can ask only there, and a neighbour's string
+/// falls outside the question altogether.
+pub fn lock_note_band(
+    samples: &[f32],
+    sample_rate: f64,
+    target_f0: f64,
+    b: f64,
+    lo_cents: f64,
+    hi_cents: f64,
+) -> Option<Lock> {
+    if !(lo_cents < hi_cents) || !lo_cents.is_finite() || !hi_cents.is_finite() {
+        return None;
+    }
     if target_f0 <= 0.0 || !target_f0.is_finite() || !b.is_finite() || b < 0.0 {
         return None;
     }
@@ -209,7 +233,7 @@ pub fn lock_note(samples: &[f32], sample_rate: f64, target_f0: f64, b: f64) -> O
             continue;
         }
         bands += 1;
-        let Some((found, amplitude)) = peak_near(&amps, bin, want, SEARCH_CENTS) else {
+        let Some((found, amplitude)) = peak_between(&amps, bin, want, lo_cents, hi_cents) else {
             continue;
         };
         if amplitude > floor * NOISE_MARGIN {
@@ -328,9 +352,13 @@ struct Candidate {
 /// agree with nothing, and the meter says nothing at all — which is the right
 /// answer when another string is drowning the one being tuned.
 fn peak_near(amps: &[f64], bin: f64, center: f64, span_cents: f64) -> Option<(f64, f64)> {
-    let span = 2f64.powf(span_cents / 1200.0);
-    let lo = (((center / span) / bin).floor().max(1.0)) as usize;
-    let hi = (((center * span) / bin).ceil() as usize).min(amps.len().saturating_sub(2));
+    peak_between(amps, bin, center, -span_cents, span_cents)
+}
+
+/// [`peak_near`] over a band that need not sit evenly about `center`.
+fn peak_between(amps: &[f64], bin: f64, center: f64, lo_cents: f64, hi_cents: f64) -> Option<(f64, f64)> {
+    let lo = (((center * 2f64.powf(lo_cents / 1200.0)) / bin).floor().max(1.0)) as usize;
+    let hi = (((center * 2f64.powf(hi_cents / 1200.0)) / bin).ceil() as usize).min(amps.len().saturating_sub(2));
     if hi <= lo + 1 {
         return None;
     }
@@ -458,6 +486,27 @@ pub fn settle(readings: &[Reading]) -> Option<Settled> {
 mod tests {
     use super::*;
     use crate::synth::{render, ToneSpec};
+
+    #[test]
+    fn a_louder_neighbour_still_ringing_is_outside_the_band() {
+        // C#4 rings loud, C4 struck softly underneath; C4 is the key on screen.
+        let c4 = 261.63;
+        let cs4 = c4 * 2f64.powf(100.0 / 1200.0);
+        let mut loud = ToneSpec::single(cs4, 4.0e-4, 0.4);
+        loud.strings[0].partials = 8;
+        loud.noise_dbfs = Some(-70.0);
+        let mut soft = ToneSpec::single(c4 * 2f64.powf(-3.0 / 1200.0), 4.0e-4, 0.4);
+        soft.strings[0].partials = 8;
+        soft.noise_dbfs = None;
+        let a = render(&loud);
+        let s = render(&soft);
+        let mix: Vec<f32> = a.iter().zip(&s).map(|(x, y)| x + 0.4 * y).collect();
+
+        let wide = lock_note(&mix, SR, c4, 4.0e-4).expect("wide search locks on something");
+        assert!(wide.cents > 80.0, "the wide search takes the neighbour: {wide:?}");
+        let band = lock_note_band(&mix, SR, c4, 4.0e-4, -45.0, 45.0).expect("band locks on C4");
+        assert!((band.cents + 3.0).abs() < 1.0, "the band finds C4 at -3 cents: {band:?}");
+    }
 
     const SR: f64 = 48_000.0;
 

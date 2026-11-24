@@ -279,3 +279,39 @@ jumped ~7¢ between updates, hence the cycles rule. "Held after strike" follows 
 string as the old key a semitone out. `neighbourFor` checks any reading 45¢+ out against where
 keys ±1, ±2 are expected (`expectCents`); if one explains it within 35¢ and 30¢ better, it follows
 there after 2 updates, or says "That sounds like X" when following is off.
+
+**The screen stays where the technician put it (2026-11-24).** Owner: tapping back to the previous
+key and playing it was read as the next key, and the screen moving on by itself was unwanted.
+Cause: the key just left was still ringing when the earlier one was tapped, the meter (±150¢
+search) heard it, and the neighbour check moved the screen to it. Now: the neighbour check only
+moves the screen within 2.5 s of a blow struck *after* the key was chosen (`S.chosenAt`,
+`S.blowAt`) — before that it says "That sounds like X — play Y"; every blow makes the meter lock
+again (`S.relock`) unless it is the same partial of the same string; and a note that holds in tune
+is marked tuned but the screen never moves by itself — Done, a tap, or playing the next key.
+
+**Note dial (2026-11-24).** Owner asked for a rotating note-name meter, pointing at a commercial
+chromatic tuner's screenshot as the idea. Ours is our own drawing, not that app's look: a flat
+cream/green card (`#dial`, `drawDial`, drawn in the strobe's frame loop) with upright monospace
+note names on a shallow arc and a fixed pointer. Each name sits at its own key's aim (stretch and
+pitch correction included), so the dial says which key is sounding: the name under the pointer is
+drawn large — the key being tuned in its own colour, any other key in plain ink — and the pointer
+turns green inside tolerance. Fed from `paintMeter` (`S.dial`), including the "sounds like" case.
+
+**Meter speed and wrong notes, second pass (2026-11-24).** Owner, after tuning with the 11-23
+build: still a delay, still wrong notes. Found and changed:
+- The meter paused for `FOLLOW_SECONDS` (0.34 s) after every detected blow, while following
+  identified the key. Gone: felt as a stall on every strike while turning a pin.
+- `lock_note` took the loudest peak within ±150¢, so a neighbour still ringing (often louder than
+  the note just struck) won. New `lock_note_band` (ABI 7): the page asks only from where this string
+  is expected (`expectCents`, minus pitch correction) to its aim, ±45¢ (`lockHere`). After 0.7 s with
+  nothing there following a blow, it falls back to ±150¢ and the neighbour check judges it. Test in
+  meter.rs: a louder C#4 over a soft C4 — wide search takes C#4, the band finds C4 at −3¢.
+- Blows were only watched for with following on, so with it off the meter never re-locked after a
+  strike. Now always watched; only the identify step depends on following.
+- Window floor 0.2 → 0.1 s (50-cycle rule unchanged: C4 still ~0.19 s; 0.15 s at C4 jumped 1–2¢ on
+  the recordings), tick floor 30 ms, partial rows read every other tick.
+Real-time harness on this PC, same synthetic note through `onSamples`, live 11-23 build vs this:
+readings 16–17/s → 25–29/s; longest gap after a strike 0.4 s → one tick; pin turn shown at C5
+0.24 → 0.15 s (C4, C3 about the same — the window sets those). Known limit: around C4 a neighbour
+ringing as loud as the fresh strike pulls the reading 1.5–3¢ until it fades (fundamentals a semitone
+apart are within the window's main lobe). An unmeasured key far out is named as its neighbour.

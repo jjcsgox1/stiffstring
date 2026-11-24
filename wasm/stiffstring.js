@@ -13,7 +13,7 @@
 (function (global) {
   "use strict";
 
-  const EXPECTED_ABI = 6;
+  const EXPECTED_ABI = 7;
 
   const NOTE_HEADER = 7;
   const PARTIAL_STRIDE = 7;
@@ -187,7 +187,7 @@
      * Returns null when there is nothing to lock onto — not sounding, far from
      * its target, or a different note. That is an answer, not an error.
      */
-    lockNote(samples, sampleRate, targetHz, b) {
+    lockNote(samples, sampleRate, targetHz, b, loCents, hiCents) {
       if (!samples.length) return null;
       const inBytes = samples.length * 4;
       const outBytes = 6 * 8;
@@ -197,7 +197,9 @@
         outPtr = this._alloc(outBytes);
         this._f32().set(samples, inPtr / 4);
         const written = this.exports.ss_lock_note(
-          inPtr, samples.length, sampleRate, targetHz, b, outPtr, 6
+          inPtr, samples.length, sampleRate, targetHz, b,
+          loCents === undefined ? -150 : loCents, hiCents === undefined ? 150 : hiCents,
+          outPtr, 6
         );
         if (written === 0) return null;
         const out = this._f64();

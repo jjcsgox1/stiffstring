@@ -115,6 +115,7 @@ dd.good{color:var(--good)} dd.bad{color:var(--bad)} dd.warn{color:var(--warn)}
 .bignote{font-family:var(--mono);font-size:54px;font-weight:600;color:var(--note);line-height:1.05;letter-spacing:-.02em;transition:color .15s}
 .bignote.followed{color:var(--good)}
 .aim{font-family:var(--mono);font-size:12px;color:var(--dim)}
+.dial{display:block;width:100%;height:118px;border-radius:12px;background:var(--card)}
 .aim.raising{color:var(--warn);font-weight:600}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
 
@@ -325,6 +326,7 @@ th{font-family:var(--sans);font-size:11px;color:var(--dim);font-weight:600;text-
         <div class="bignote" id="tuneNote">&mdash;</div>
         <div class="aim" id="tuneAim">&nbsp;</div>
       </div>
+      <canvas class="dial" id="dial" aria-label="Which note is sounding"></canvas>
       <div class="reads">
         <div><div class="lbl">Live</div><div class="live" id="tuneCents">&mdash;</div></div>
         <div><div class="lbl">Held after strike</div><div class="held waiting" id="tuneHeld">&mdash;</div></div>
@@ -525,9 +527,9 @@ const STORE_KEY = "stiffstring.pianos";
    before the number stopped jumping by several cents. So the window is fifty
    cycles of the partial being followed, between 0.2 and 0.5 s. */
 const METER_CYCLES = 50;
-const METER_MIN_S = 0.2;
+const METER_MIN_S = 0.1;    // from about C5 up; C4 needs about 0.2 s, which the cycles rule gives it
 const METER_MAX_S = 0.5;
-const METER_MIN_MS = 40;
+const METER_MIN_MS = 30;
 const METER_HISTORY = 3;    // readings the display holds a median over: enough to step over one bad one
 const METER_LOST_MS = 700;  // silence this long and the lock is let go
 const METER_STALE_MS = 350; // no fresh reading: dim the number, do not blank it
@@ -867,7 +869,7 @@ function onSamples(block){
   // While tuning, the meter pulls what it needs out of the ring on its own
   // clock. Onset capture would only fight it; the only thing listened for is a
   // blow, to ask which key it was.
-  if (S.tuning){ if (following()) watchForBlow(rms, block.length); return; }
+  if (S.tuning){ watchForBlow(rms, block.length); return; }
   if (S.mode !== "measure" || measuringClosed()) return;
 
   if (S.capturing){
@@ -1595,6 +1597,27 @@ function stopTuningMeter(){
   S.readings = [];
 }
 
+/* Where to look for this key's string, in cents from its aim: from where it is
+   believed to be — measured, or tuned — to its aim, and a margin either side.
+   A neighbour's string, a semitone off, is outside it. Only when nothing has
+   been found there for a while after a blow does the meter look as wide as it
+   can, so a string far from anything expected still gets a number; the
+   neighbour check then says whether it is this key at all. */
+const LOCK_MARGIN_CENTS = 45;
+const LOCK_WIDE_CENTS = 150;
+const LOCK_WIDE_AFTER_MS = 700;
+function lockHere(audio, key, target, b, now){
+  const e = expectCents()[key-1] - raiseFor(key);
+  const lo = Math.max(-LOCK_WIDE_CENTS, Math.min(e, 0) - LOCK_MARGIN_CENTS);
+  const hi = Math.min(LOCK_WIDE_CENTS, Math.max(e, 0) + LOCK_MARGIN_CENTS);
+  let l = S.engine.lockNote(audio, S.sampleRate, target, b, lo, hi);
+  if (l){ S.searchFrom = 0; return l; }
+  if (!S.searchFrom) S.searchFrom = now;
+  if (now - S.searchFrom >= LOCK_WIDE_AFTER_MS)
+    l = S.engine.lockNote(audio, S.sampleRate, target, b, -LOCK_WIDE_CENTS, LOCK_WIDE_CENTS);
+  return l;
+}
+
 /* Seconds of audio per reading, from the partial being followed — or before
    anything is followed, the lowest one the meter could follow. */
 function meterWindow(key, b){
@@ -1629,6 +1652,8 @@ function selectKey(key){
   S.lastReadingAt = 0;
   S.ladder = new Map();
   S.strobe = new Map();
+  S.dial = null;
+  S.searchFrom = 0;
   S.amps = [];
   S.strike = null;
   S.held = null;
@@ -1712,7 +1737,13 @@ function watchForBlow(rms, blockLen){
   } else if (now - S.followAt > FOLLOW_REARM_MS && rms > S.recentDb + FOLLOW_RISE_DB && rms > ONSET_FLOOR_DB){
     if (!S.followFrame) S.followFrame = Math.pow(2, Math.round(Math.log2(S.sampleRate * FOLLOW_SECONDS)));
     S.followAt = now;
-    S.followPending = {
+    // A new blow is a new sound. The meter may be following a string that was
+    // already ringing — the key just left, still sounding when this one was
+    // chosen — and would go on following it. Look again from scratch.
+    S.blowAt = now;
+    S.relock = true;
+    S.searchFrom = 0;
+    if (following()) S.followPending = {
       // Where the blow landed in the ring: the start of the block that rose.
       at: (S.ringPos - blockLen + S.ringLen) % S.ringLen,
       need: S.followFrame,
@@ -1784,6 +1815,7 @@ const NEIGHBOUR_FROM_CENTS = 45;  // closer than this, it is a string being tune
 const NEIGHBOUR_FIT_CENTS = 35;   // the neighbour must explain it this well
 const NEIGHBOUR_MARGIN_CENTS = 30; // and this much better than the key on screen
 const NEIGHBOUR_TICKS = 2;        // on this many updates in a row
+const NEIGHBOUR_AFTER_BLOW_MS = 2500; // and only this soon after a blow
 function neighbourFor(key, c){
   const f0 = aimHz(key) * Math.pow(2, c / 1200);
   const expect = expectCents();
@@ -1800,21 +1832,31 @@ function neighbourFor(key, c){
 function meterTick(){
   if (!S.tuning || !S.ring) return;
   const began = performance.now();
-  // A blow has landed and which key it was is about to be known. Reading now
-  // would read the new string against the old key's target and flash a wrong
-  // number for the moment it takes to find out.
-  if (S.followPending){
-    S.meterTimer = setTimeout(meterTick, METER_MIN_MS);
-    return;
-  }
+  // No pause while following works out which key a blow was. The meter used to
+  // stop for that third of a second after every blow, so as not to read a new
+  // string against the old key's target — felt as a stall on every strike
+  // while turning a pin. It no longer needs to: it looks for this key's string
+  // only where that string should be (lockBand), so a different key's string is
+  // not read at all, and the screen moves when following says so.
   const key = S.tuneKey;
   const target = aimHz(key);
   const b = S.curve.b[key-1];
   S.meterWin = meterWindow(key, b);
   const audio = recentAudio(S.meterWin);
 
+  if (S.lock && S.relock){
+    S.relock = false;
+    const l = lockHere(audio, key, target, b, began);
+    // The same partial of the same string, struck again: carry on, readings
+    // and all, so re-striking a note while turning the pin does not blank it.
+    if (l && !(l.partial === S.lock.partial && Math.abs(cents(S.lock.hz, l.hz)) < 15)){
+      S.lock = l; S.readings = []; S.lastReadingAt = began; S.amps = [];
+      S.strike = { at: began, readings: [] };
+    }
+  }
   if (!S.lock){
-    const l = S.engine.lockNote(audio, S.sampleRate, target, b);
+    S.relock = false;
+    const l = lockHere(audio, key, target, b, began);
     if (l){
       S.lock = l; S.readings = []; S.lastReadingAt = began; S.amps = [];
       // A fresh lock is a fresh blow: nothing was sounding a moment ago.
@@ -1837,7 +1879,9 @@ function meterTick(){
   }
 
   // One other partial per tick, in turn, for the rows.
-  if (S.lock) readOneRung(audio, key, b, began);
+  // The rows take turns with the main reading, so the number the technician
+  // watches updates as often as the phone allows.
+  if (S.lock && (S.tickN = (S.tickN || 0) + 1) % 2 === 0) readOneRung(audio, key, b, began);
 
   paintMeter(began);
   paintLadder(began);
@@ -1968,6 +2012,7 @@ function drawStrobe(now){
   strobeRaf = requestAnimationFrame(drawStrobe);
   const dt = Math.min(0.1, (now - strobeLast) / 1000);
   strobeLast = now;
+  if (S.mode === "tune") drawDial(dt);
   if (!strobeOn() || S.mode !== "tune") return;
   const ink = css("--ink"), good = css("--good"), card = css("--card2"), main = css("--brass");
   const dpr = window.devicePixelRatio || 1;
@@ -2003,6 +2048,91 @@ function drawStrobe(now){
     for (let x = x0; x < w; x += period) g.fillRect(Math.round(x), 0, Math.round(stripe), h);
     g.globalAlpha = 1;
   }
+}
+
+/* The note dial: what is actually sounding, by name.
+
+   A strip of the keyboard's note names, laid on an arc at each key's own aim
+   — stretch and pitch correction included, so they are not quite a hundred
+   cents apart — turns under a fixed pointer to wherever the string is. On
+   target, the key being tuned sits under the pointer inside its green band;
+   strike the key beside it and that key's name comes round instead, which a
+   number alone, a hundred cents out, does not say. */
+const DIAL_SEMITONE_FRAC = 0.27;   // a semitone's width, as a share of the dial's width
+const DIAL_EASE_S = 0.09;
+const DIAL_REACH = 3;              // keys labelled either side
+let dialPos = 0, dialAlpha = 0.35;
+function drawDial(dt){
+  const cv = $("#dial");
+  if (!cv || !S.curve || !cv.clientWidth) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W = cv.clientWidth, H = cv.clientHeight;
+  if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)){ cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+  const g = cv.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, W, H);
+
+  const d = S.dial;
+  const live = d && !d.stale && performance.now() - d.at < METER_STALE_MS * 2;
+  const k = 1 - Math.exp(-dt / DIAL_EASE_S);
+  dialPos += ((live ? d.c : dialPos) - dialPos) * k;
+  dialAlpha += ((live ? 1 : 0.35) - dialAlpha) * k;
+
+  // A wide circle whose top runs across the dial.
+  const R = W * 1.7, cx = W / 2, cy = 34 + R;
+  const radPerCent = (W * DIAL_SEMITONE_FRAC / R) / 100;
+  const at = cents => (cents - dialPos) * radPerCent - Math.PI / 2;
+  const pt = (a, r) => [cx + Math.cos(a) * r, cy + Math.sin(a) * r];
+  const key = S.tuneKey, base = aimHz(key);
+  const ink = css("--ink"), dim = css("--dim"), faint = css("--faint"), note = css("--note");
+  const good = css("--good"), goodBg = css("--good-bg"), line = css("--line2");
+
+  g.globalAlpha = dialAlpha;
+  // The key's own band: inside it is in tune.
+  const tol = Number($("#tol").value);
+  g.strokeStyle = goodBg; g.lineWidth = 16;
+  g.beginPath(); g.arc(cx, cy, R - 8, at(-tol), at(tol)); g.stroke();
+  // The rail.
+  g.strokeStyle = line; g.lineWidth = 1;
+  g.beginPath(); g.arc(cx, cy, R, -Math.PI / 2 - 0.45, -Math.PI / 2 + 0.45); g.stroke();
+
+  // Ticks every ten cents across the reach, longer at each key.
+  const lo = cents(base, aimHz(Math.max(1, key - DIAL_REACH))) - 60;
+  const hi = cents(base, aimHz(Math.min(88, key + DIAL_REACH))) + 60;
+  g.strokeStyle = dim;
+  for (let t = Math.ceil(lo / 10) * 10; t <= hi; t += 10){
+    const a = at(t);
+    if (Math.abs(a + Math.PI / 2) > 0.45) continue;
+    const len = t % 50 === 0 ? 9 : 5;
+    const [x1, y1] = pt(a, R), [x2, y2] = pt(a, R - len);
+    g.lineWidth = 1; g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke();
+  }
+  // The names, upright, each at its own key's aim.
+  g.textAlign = "center"; g.textBaseline = "middle";
+  for (let kk = key - DIAL_REACH; kk <= key + DIAL_REACH; kk++){
+    if (kk < 1 || kk > 88) continue;
+    const off = cents(base, aimHz(kk));
+    const a = at(off);
+    if (Math.abs(a + Math.PI / 2) > 0.45) continue;
+    const [x1, y1] = pt(a, R), [x2, y2] = pt(a, R - 16);
+    g.strokeStyle = kk === key ? note : ink; g.lineWidth = kk === key ? 2.5 : 1.5;
+    g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke();
+    const [tx, ty] = pt(a, R - 44);
+    if (tx < 22 || tx > W - 22) continue;
+    // The name under the pointer is the note sounding, and is drawn large:
+    // the key being tuned in its own colour, any other key in plain ink.
+    const under = Math.abs(off - dialPos) < 50;
+    g.fillStyle = kk === key ? note : under ? ink : dim;
+    g.font = (under ? "700 30px " : kk === key ? "700 22px " : "600 20px ") + css("--mono");
+    g.fillText(keyName(kk), tx, ty);
+  }
+  g.globalAlpha = 1;
+
+  // The pointer: fixed, green when the key on screen is in tune.
+  const inTune = live && d.inside;
+  g.fillStyle = inTune ? good : live ? ink : faint;
+  g.beginPath(); g.moveTo(cx - 11, 4); g.lineTo(cx + 11, 4); g.lineTo(cx, 30); g.closePath(); g.fill();
+  g.fillRect(cx - 1.5, 28, 3, 22);
 }
 
 function applyRows(){ document.body.classList.toggle("rows-strobe", $("#rows").value === "strobe"); }
@@ -2042,6 +2172,7 @@ function paintMeter(now){
   }
 
   if (!s){
+    if (S.dial) S.dial.stale = true;
     el.textContent = "—";
     el.className = "live";
     $("#tuneWay").textContent = S.lock ? "Listening" : "Play the note";
@@ -2051,9 +2182,14 @@ function paintMeter(now){
   }
 
   const c = s.cents;
+  S.dial = { c, at: now, inside: Math.abs(c) <= tol, stale };
   const other = Math.abs(c) >= NEIGHBOUR_FROM_CENTS ? neighbourFor(S.tuneKey, c) : 0;
   S.neighbourTicks = other ? (S.neighbourTicks || 0) + 1 : 0;
-  if (other && following() && S.neighbourTicks >= NEIGHBOUR_TICKS){
+  // Only for a blow following missed. A key chosen by hand stays chosen until a
+  // key has been struck after choosing it: until then, whatever the meter hears
+  // is the last key ringing on.
+  const struckSince = S.blowAt > (S.chosenAt || 0) && now - S.blowAt < NEIGHBOUR_AFTER_BLOW_MS;
+  if (other && following() && struckSince && S.neighbourTicks >= NEIGHBOUR_TICKS){
     S.neighbourTicks = 0;
     followTo(other);
     return;
@@ -2063,7 +2199,7 @@ function paintMeter(now){
     // nothing about the key on screen.
     el.textContent = "—";
     el.className = "live off";
-    $("#tuneWay").textContent = "That sounds like " + keyName(other) + (following() ? "" : " — tap it to tune it");
+    $("#tuneWay").textContent = "That sounds like " + keyName(other) + (following() && struckSince ? "" : " — play " + keyName(S.tuneKey));
     S.insideSince = 0;
     return;
   }
@@ -2085,9 +2221,9 @@ function paintMeter(now){
   if (inside && !stale && s.spread <= tol * 3){
     if (!S.insideSince) S.insideSince = now;
     else if (now - S.insideSince >= SETTLE_MS && $("#advance").value === "1"){
-      // Following: mark it and stay; the next key played moves the screen.
-      // Not following: mark it and move on along the sequence.
-      if (following()) markTunedHere(); else markDone();
+      // Mark it and stay. The screen moves when the technician moves: by
+      // playing the next key, by tapping one, or with Done.
+      markTunedHere();
     }
   } else {
     S.insideSince = 0;
@@ -2182,7 +2318,7 @@ function centerOn(k, smooth){
 
 /* A key tapped or picked: measured next in Measure mode, tuned in Tune mode. */
 function chooseKey(k){
-  if (S.mode === "tune"){ if (S.curve){ selectKey(k); } }
+  if (S.mode === "tune"){ if (S.curve){ selectKey(k); S.chosenAt = performance.now(); } }
   else measureKey(k);
   centerOn(k, true);
 }
@@ -2252,7 +2388,7 @@ $("#raiseCap").addEventListener("change", changeRaise);
 $("#btnDone").addEventListener("click", markDone);
 $("#btnBack").addEventListener("click", () => {
   const i = S.order.indexOf(S.tuneKey);
-  if (i > 0){ selectKey(S.order[i - 1]); centerOn(S.tuneKey, true); }
+  if (i > 0){ selectKey(S.order[i - 1]); S.chosenAt = performance.now(); centerOn(S.tuneKey, true); }
 });
 $("#tol").addEventListener("change", () => { S.insideSince = 0; renderKeyboard(); });
 
@@ -2261,7 +2397,7 @@ $("#tol").addEventListener("change", () => { S.insideSince = 0; renderKeyboard()
 function explainAdvance(){
   $("#advanceWhy").textContent = following()
     ? "Mark it tuned: a note that holds in tune turns green and the screen stays on it. Play the next key to move."
-    : "Mark it tuned: a note that holds in tune turns green and the screen moves to the next key along.";
+    : "Mark it tuned: a note that holds in tune turns green and the screen stays on it. Tap the next key, or press Done, to move.";
 }
 try { const f = localStorage.getItem(FOLLOW_KEY); if (f === "0" || f === "1") $("#follow").value = f; } catch(e){}
 try { const r = localStorage.getItem(ROWS_KEY); if (r === "strobe" || r === "needle") $("#rows").value = r; } catch(e){}
