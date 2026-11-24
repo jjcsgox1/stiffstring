@@ -467,7 +467,10 @@ th{font-family:var(--sans);font-size:11px;color:var(--dim);font-weight:600;text-
   </div>
 </div>
 
-<script src="../wasm/stiffstring.js"></script>
+<!-- The engine's version is in its address: the host lets a browser keep a
+     file ten minutes, and a page that is new beside an engine that is not
+     refuses to start. Raise ENGINE_V with every engine rebuild. -->
+<script src="../wasm/stiffstring.js?v=7"></script>
 <script>
 "use strict";
 const $ = s => document.querySelector(s);
@@ -773,8 +776,9 @@ class Tap extends AudioWorkletProcessor {
 registerProcessor('tap', Tap);
 `;
 
+const ENGINE_V = 7;   // keep in step with the script tag above and the engine's ABI
 async function ensureEngine(){
-  if (!S.engine) S.engine = await Stiffstring.load("../wasm/stiffstring.wasm");
+  if (!S.engine) S.engine = await Stiffstring.load("../wasm/stiffstring.wasm?v=" + ENGINE_V);
   return S.engine;
 }
 
