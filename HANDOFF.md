@@ -315,3 +315,14 @@ readings 16–17/s → 25–29/s; longest gap after a strike 0.4 s → one tick;
 0.24 → 0.15 s (C4, C3 about the same — the window sets those). Known limit: around C4 a neighbour
 ringing as loud as the fresh strike pulls the reading 1.5–3¢ until it fades (fundamentals a semitone
 apart are within the window's main lobe). An unmeasured key far out is named as its neighbour.
+
+**Temperament only, and wound-bass pitch correction (2026-11-24).**
+- New piano → "What to tune": full (A0–C8) or temperament only (`S.piano.scope`). Temperament only
+  measures F3–A4 (17 keys) and tunes A4, then F3–F4; keys outside are not offered or followed to.
+  "Measure the rest of the piano" (measuring-closed panel and pitch sheet) measures every unmeasured
+  key A0 upward and turns the piano into a full tuning. Tuned notes never move: their targets are
+  saved (`tunedCents`), passed to the solver as overrides, and pinned exactly afterwards
+  (`pinTuned`) — the solver's overlapping override blends left a run of them up to 0.1¢ off.
+- Pitch correction for wound strings (below the measured bass break, or the two-string notes if no
+  break was found): 10% of how far out, 2¢ limit, both changeable (5–50%, 1–30¢). Steel strings
+  keep half, 10¢. The owner said 2¢ "if more than 30¢" flat; at 10% the 2¢ limit is reached at 20¢.

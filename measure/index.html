@@ -302,7 +302,7 @@ th{font-family:var(--sans);font-size:11px;color:var(--dim);font-weight:600;text-
       <div class="level"><i id="level"></i></div>
       <div class="card"><dl class="kv" id="lastResult"><dt>Last note</dt><dd>none yet</dd></dl></div>
       <p class="note" id="measureCount">&nbsp;</p>
-      <p class="note">Play every key from the bottom up, one at a time, firmly. About a second each is
+      <p class="note" id="measureHow">Play every key from the bottom up, one at a time, firmly. About a second each is
         enough; the screen moves on by itself when it has the note. You can stop at any point
         with Solve, and tap any key below to measure it again.</p>
       <div class="actions" style="margin-top:auto">
@@ -314,8 +314,9 @@ th{font-family:var(--sans);font-size:11px;color:var(--dim);font-weight:600;text-
     <div class="stage-in hidden" id="measureClosed">
       <div class="closed stack">
         <p><b>Measuring is closed.</b></p>
-        <p class="note">Notes have been tuned to these targets already. Measuring more now would move
+        <p class="note" id="closedWhy">Notes have been tuned to these targets already. Measuring more now would move
           them, and a note already tuned must never move. Start a new piano to measure again.</p>
+        <button class="primary hidden" id="btnRest" style="width:100%;height:50px">Measure the rest of the piano</button>
       </div>
     </div>
 
@@ -375,6 +376,13 @@ th{font-family:var(--sans);font-size:11px;color:var(--dim);font-weight:600;text-
       </div>
       <p class="note">The string counts decide whether a beating note is a unison to tune or a false
         beat that tuning cannot cure. Defaults are a guess &mdash; correct them and they stay with this piano.</p>
+      <div><label for="nScope">What to tune</label>
+        <select id="nScope">
+          <option value="full" selected>Full tuning &mdash; measure every key, A0 to C8</option>
+          <option value="temperament">Temperament only &mdash; measure F3 to A4</option>
+        </select></div>
+      <p class="note" id="scopeWhy">Temperament only measures 17 keys, well under a minute, and tunes A4 then
+        F3 to F4. The rest of the piano can be measured later without moving anything already tuned.</p>
       <button class="primary" id="btnBegin" style="width:100%;height:50px">Start measuring</button>
     </div>
   </div>
@@ -400,16 +408,34 @@ th{font-family:var(--sans);font-size:11px;color:var(--dim);font-weight:600;text-
       <div class="card stack">
         <div><label for="raise">Pitch correction</label>
           <select id="raise"><option value="0" selected>Off &mdash; tune to the targets</option><option value="1">On &mdash; go past by half</option></select></div>
+        <div class="lbl" id="steelLbl">Steel strings</div>
         <div><label for="raiseCap">Most it goes past</label>
           <select id="raiseCap">
             <option value="5">5&cent;</option><option value="10" selected>10&cent; &mdash; recommended safe limit</option>
             <option value="15">15&cent;</option><option value="20">20&cent;</option><option value="25">25&cent;</option>
             <option value="30">30&cent;</option><option value="40">40&cent;</option><option value="50">50&cent;</option>
           </select></div>
+        <div class="lbl" id="bassLbl">Wound bass strings</div>
+        <div class="fields">
+          <div><label for="raiseBassPct">Go past by</label>
+            <select id="raiseBassPct">
+              <option value="0.05">5%</option><option value="0.1" selected>10% (safe)</option>
+              <option value="0.15">15%</option><option value="0.2">20%</option><option value="0.25">25%</option>
+              <option value="0.3">30%</option><option value="0.5">50%</option>
+            </select></div>
+          <div><label for="raiseBassCap">Most it goes past</label>
+            <select id="raiseBassCap">
+              <option value="1">1&cent;</option><option value="2" selected>2&cent; (safe)</option>
+              <option value="3">3&cent;</option><option value="5">5&cent;</option><option value="10">10&cent;</option>
+              <option value="15">15&cent;</option><option value="20">20&cent;</option><option value="25">25&cent;</option>
+              <option value="30">30&cent;</option>
+            </select></div>
+        </div>
         <p class="note" id="raiseWhy">&nbsp;</p>
       </div>
       <div class="card"><dl class="kv" id="curveInfo"></dl></div>
       <button class="primary hidden" id="btnStartTuning" style="width:100%;height:50px">Start tuning</button>
+      <button class="hidden" id="btnRestPitch" style="width:100%;height:46px">Measure the rest of the piano</button>
     </div>
   </div>
 
@@ -593,6 +619,8 @@ function computeRaise(){
   S.raise = new Array(88).fill(0);
   if (!S.curve || $("#raise").value !== "1") return;
   const cap = Number($("#raiseCap").value) || 10;
+  const bassFrac = Number($("#raiseBassPct").value) || 0.1;
+  const bassCap = Number($("#raiseBassCap").value) || 2;
   const known = [];
   for (const r of S.results.values()) if (r.ok) known.push([r.key, cents(S.curve.hz[r.key-1], r.f0)]);
   known.sort((a, b) => a[0] - b[0]);
@@ -603,9 +631,20 @@ function computeRaise(){
     for (const p of known){ if (p[0] <= k) lo = p; if (p[0] >= k && !hi) hi = p; }
     const off = !lo ? hi[1] : !hi ? lo[1] : lo[0] === hi[0] ? lo[1]
       : lo[1] + (hi[1] - lo[1]) * (k - lo[0]) / (hi[0] - lo[0]);
-    S.raise[k-1] = Math.max(-cap, Math.min(cap, -off * RAISE_FRACTION));
+    const wound = isWound(k);
+    const c = wound ? bassCap : cap, f = wound ? bassFrac : RAISE_FRACTION;
+    S.raise[k-1] = Math.max(-c, Math.min(c, -off * f));
   }
 }
+/* Wound bass strings are pulled far more gently: copper-wound strings stretch
+   less predictably and break more expensively, so the owner's rule for them is
+   a tenth of how far they are out, not a half, and a 2¢ limit. A wound string
+   is one below the bass break the measurements found — the first plain-wire
+   key — or, with no break found, one of the two-string notes and below. */
+function woundBelow(){
+  return S.curve && S.curve.breakKey ? S.curve.breakKey : (S.piano ? S.piano.double + 1 : 17);
+}
+const isWound = key => key < woundBelow();
 const raiseFor = key => (S.raise && S.raise[key-1]) || 0;
 /* What the meter aims at: the target, plus any pitch correction. */
 const aimHz = key => S.curve.hz[key-1] * Math.pow(2, raiseFor(key) / 1200);
@@ -613,21 +652,29 @@ const aimHz = key => S.curve.hz[key-1] * Math.pow(2, raiseFor(key) / 1200);
 function explainRaise(){
   const on = $("#raise").value === "1";
   $("#raiseCap").disabled = !on;
+  $("#raiseBassPct").disabled = !on; $("#raiseBassCap").disabled = !on;
+  const wb = woundBelow();
+  $("#steelLbl").textContent = "Steel strings · " + keyName(wb) + " and up";
+  $("#bassLbl").textContent = "Wound bass strings · A0 to " + keyName(wb - 1);
   if (!on){
-    $("#raiseWhy").textContent = "For a piano well off pitch. Each note is tuned past its target by half of "
-      + "how far it measured out — 20¢ flat is tuned 10¢ sharp — so it settles near pitch as the rest come up. "
-      + "Then turn this off and tune again to the targets.";
+    $("#raiseWhy").textContent = "For a piano well off pitch. Steel strings are tuned past their target by half of "
+      + "how far they measured out — 20¢ flat is tuned 10¢ sharp — and wound bass strings by a tenth, up to 2¢, "
+      + "so the piano settles near pitch as the rest come up. Then turn this off and tune again to the targets.";
     return;
   }
   const cap = Number($("#raiseCap").value);
+  const bassPct = Math.round(Number($("#raiseBassPct").value) * 100), bassCap = Number($("#raiseBassCap").value);
   let most = 0, mostKey = 0, capped = 0;
   for (let k = 1; k <= 88; k++){
     const v = raiseFor(k);
     if (Math.abs(v) > Math.abs(most)){ most = v; mostKey = k; }
-    if (Math.abs(v) >= cap - 1e-9) capped++;
+    if (Math.abs(v) >= (isWound(k) ? bassCap : cap) - 1e-9) capped++;
   }
-  $("#raiseWhy").textContent = "On. Every note aims past its own target by half of how far it measured out, "
+  $("#raiseWhy").textContent = "On. Steel strings aim past their target by half of how far they measured out, "
     + "up to " + cap + "¢" + (cap > 10 ? " — more than the 10¢ recommended" : "") + ". "
+    + "Wound bass strings by " + bassPct + "%, up to " + bassCap + "¢"
+    + (bassPct > 10 || bassCap > 2 ? " — more than the 10% and 2¢ recommended" : "")
+    + " (20¢ flat is tuned " + Math.min(bassCap, 20 * bassPct / 100).toFixed(1) + "¢ sharp). "
     + (mostKey ? "Most: " + keyName(mostKey) + " " + signed(most) + "¢. " : "")
     + (capped ? capped + " note" + (capped === 1 ? "" : "s") + " held at the limit. " : "")
     + "The meter reads against the aim, and the screen says how far past the target it is.";
@@ -686,6 +733,20 @@ function layBass(curve, a4){
     // m·fL·√(1 + B_L·m²) = n·fU·√(1 + B_U·n²)
     hz[k-1] = up * (n / m) * Math.sqrt((1 + bu * n * n) / (1 + bl * m * m));
     cs[k-1] = cents(a4 * Math.pow(2, (k - 49) / 12), hz[k-1]);
+  }
+  return Object.assign({}, curve, { hz, cents: cs });
+}
+
+/* The solver holds tuned notes by blending its curve into them, and with a
+   run of them side by side — a whole temperament — the blends overlap and can
+   leave one a tenth of a cent off. A tuned note is put back exactly. */
+function pinTuned(curve, a4){
+  const keys = [...S.tuned].filter(k => S.tunedCents[k] !== undefined);
+  if (!keys.length) return curve;
+  const hz = curve.hz.slice(), cs = curve.cents.slice();
+  for (const k of keys){
+    cs[k-1] = S.tunedCents[k];
+    hz[k-1] = a4 * Math.pow(2, (k - 49) / 12) * Math.pow(2, cs[k-1] / 1200);
   }
   return Object.assign({}, curve, { hz, cents: cs });
 }
@@ -938,11 +999,13 @@ function resetPianoState(){
   stopTuningMeter();
   S.plan = []; S.index = 0; S.results = new Map(); S.attempts = new Map(); S.lastKey = null;
   S.secondPass = false; S.curve = null; S.solvedOnce = false;
+  S.tunedCents = {}; S.measuringRest = false;
   S.tuned = new Set(); S.seen = new Map(); S.order = tuningOrder(); S.tuneKey = TEMPERAMENT_LOW;
   S.graphKey = null;
   $("#a4").innerHTML = ""; $("#a4").disabled = false; $("#stretch").disabled = false; $("#stretch").value = "1";
   $("#bass").disabled = false; $("#bass").value = "63";
   $("#raise").value = "0"; $("#raiseCap").value = "10"; S.raise = null;
+  $("#raiseBassPct").value = "0.1"; $("#raiseBassCap").value = "2";
   kv($("#lastResult"), [["Last note", "none yet"]]);
   $("#btnRedo").disabled = true;
 }
@@ -955,14 +1018,15 @@ async function beginNewPiano(){
     notes: $("#nNotes").value.trim(),
     single: Number($("#nSingle").value) || 0,
     double: Number($("#nDouble").value) || 0,
+    scope: $("#nScope").value,
   };
   resetPianoState();
   closeSheet();
   showScreen("piano");
   S.mode = "measure";
   try { await ensureEngine(); } catch(e){ /* reported by startMic */ }
-  // Every key, A0 upward: nothing to look for, just the next key up.
-  S.plan = Array.from({ length: 88 }, (_, i) => i + 1);
+  // Every key in the job, bottom upward: nothing to look for, just the next key up.
+  S.plan = measureRange();
   savePiano();
   refresh();
   // Straight on to listening: the tap on Start measuring is the gesture the
@@ -975,8 +1039,10 @@ async function openPiano(p){
   S.piano = {
     id: p.id, name: p.name, type: p.type, notes: p.notes || "",
     single: p.stringing ? p.stringing.single : 8, double: p.stringing ? p.stringing.double : 16,
+    scope: p.scope || "full",
   };
   resetPianoState();
+  S.tunedCents = Object.assign({}, p.tunedCents || {});
   for (const s of p.samples){
     S.results.set(s.key, {
       key:s.key, ok:true, f0:s.f0, b:s.b, weight:s.weight,
@@ -995,6 +1061,8 @@ async function openPiano(p){
     $("#bass").value = p.bass || "auto";
     $("#raise").value = p.raise && p.raise.on ? "1" : "0";
     $("#raiseCap").value = String(p.raise && p.raise.cap || 10);
+    $("#raiseBassPct").value = String(p.raise && p.raise.bassPct || 0.1);
+    $("#raiseBassCap").value = String(p.raise && p.raise.bassCap || 2);
     S.solvedOnce = true;
     solve();
     S.mode = "tune";
@@ -1011,10 +1079,13 @@ function pianoRecord(){
     type: S.piano.type,
     notes: S.piano.notes,
     stringing: { single: S.piano.single, double: S.piano.double },
+    scope: S.piano.scope || "full",
+    tunedCents: S.tunedCents || {},
     a4: Number($("#a4").value) || 440,
     stretch: Number($("#stretch").value),
     bass: $("#bass").value,
-    raise: { on: $("#raise").value === "1", cap: Number($("#raiseCap").value) },
+    raise: { on: $("#raise").value === "1", cap: Number($("#raiseCap").value),
+      bassPct: Number($("#raiseBassPct").value), bassCap: Number($("#raiseBassCap").value) },
     samples: usableSamples(),
     tuned: [...S.tuned],
     savedAt: new Date().toISOString(),
@@ -1063,7 +1134,7 @@ function goHome(){
 }
 
 /* ======================= what the screen shows ======================= */
-const measuringClosed = () => S.tuned.size > 0;
+const measuringClosed = () => S.tuned.size > 0 && !S.measuringRest;
 
 function refresh(){
   if (!S.piano) return;
@@ -1086,6 +1157,17 @@ function refresh(){
     : "Tap to start the microphone and measure.";
   $("#measure").classList.toggle("hidden", needMic || S.mode !== "measure" || measuringClosed());
   $("#measureClosed").classList.toggle("hidden", S.mode !== "measure" || !measuringClosed());
+  const canRest = temperamentOnly() && !S.measuringRest && !!S.curve;
+  $("#btnRest").classList.toggle("hidden", !canRest);
+  $("#btnRestPitch").classList.toggle("hidden", !canRest);
+  $("#closedWhy").textContent = canRest
+    ? "The temperament has been tuned. Measuring the rest of the piano keeps every note already tuned exactly where it is."
+    : "Notes have been tuned to these targets already. Measuring more now would move them, and a note already tuned must never move. Start a new piano to measure again.";
+  $("#measureHow").textContent = S.measuringRest
+    ? "Play every other key from the bottom up, one at a time, firmly. The temperament is skipped: it is measured and tuned already."
+    : temperamentOnly()
+    ? "Play F3 up to A4, one key at a time, firmly. About a second each is enough; the screen moves on by itself."
+    : "Play every key from the bottom up, one at a time, firmly. About a second each is enough; the screen moves on by itself when it has the note. You can stop at any point with Solve, and tap any key below to measure it again.";
   $("#tune").classList.toggle("hidden", needMic || S.mode !== "tune");
 
   if (S.mode === "measure") showTarget();
@@ -1302,6 +1384,7 @@ function showTarget(){
    it is measured again; the old reading goes. */
 function measureKey(key){
   if (measuringClosed()) return;
+  if (S.tuned.has(key)) return;   // measured and tuned: it stays
   const later = S.plan.indexOf(key, S.index);
   if (later >= 0) S.plan.splice(later, 1);
   if (S.results.has(key)) S.results.delete(key);
@@ -1351,6 +1434,21 @@ function finish(){
     $("#prompt").textContent = "Not enough notes measured to solve";
     return;
   }
+  if (S.measuringRest){
+    // The rest of the piano is in: a full tuning now, with the temperament
+    // held exactly where it was tuned.
+    S.measuringRest = false;
+    S.piano.scope = "full";
+    solve();
+    S.order = tuningOrder();
+    $("#pitchBanner").textContent = "Measured the rest. The notes already tuned stay exactly where they are.";
+    $("#pitchBanner").classList.remove("hidden");
+    $("#btnStartTuning").classList.remove("hidden");
+    openSheet("sheetPitch");
+    savePiano();
+    refresh();
+    return;
+  }
   if (!S.solvedOnce){
     buildPitchOptions(null);
     S.solvedOnce = true;
@@ -1371,8 +1469,13 @@ function solve(){
   const samples = usableSamples();
   const a4 = Number($("#a4").value) || 440;
   const stretch = Number($("#stretch").value);
-  const solved = S.engine.solveCurve(samples, { a4Hz:a4, stretch });
-  const curve = solved && layBass(solved, a4);
+  // Notes already tuned are held exactly where they were tuned; the solver
+  // blends the rest of the curve into them. Measuring the rest of a piano whose
+  // temperament is done must not move the temperament.
+  const overrides = [...S.tuned].filter(k => S.tunedCents[k] !== undefined)
+    .map(k => ({ key: k, cents: S.tunedCents[k] }));
+  const solved = S.engine.solveCurve(samples, { a4Hz:a4, stretch, overrides });
+  const curve = solved && pinTuned(layBass(pinTuned(solved, a4), a4), a4);
   explainBass();
   if (!curve){ $("#pitchWhy").textContent = "Could not solve a tuning from these notes."; return; }
   S.curve = curve;
@@ -1555,8 +1658,22 @@ const SECTIONS = [
   { name: "Down the bass", from: TEMPERAMENT_LOW - 1, to: 1 },
 ];
 
+/* Temperament only: A4 from the fork or the reference first, then the
+   temperament octave upward, as it is set by ear. */
+const temperamentOnly = () => S.piano && S.piano.scope === "temperament";
+const TEMPERAMENT_MEASURE = [TEMPERAMENT_LOW, 49];   // F3 to A4: the octave, and A4 above it
+function measureRange(){
+  const [lo, hi] = temperamentOnly() ? TEMPERAMENT_MEASURE : [1, 88];
+  return Array.from({ length: hi - lo + 1 }, (_, i) => lo + i);
+}
+
 /* Every key exactly once, each one next to the last. */
 function tuningOrder(){
+  if (temperamentOnly()){
+    const order = [49];
+    for (let k = TEMPERAMENT_LOW; k <= TEMPERAMENT_HIGH; k++) order.push(k);
+    return order;
+  }
   const order = [];
   for (const s of SECTIONS){
     const step = s.to >= s.from ? 1 : -1;
@@ -1574,6 +1691,11 @@ function sectionFor(key){
 }
 
 function sectionLabel(key){
+  if (temperamentOnly()){
+    const done = S.order.filter(k => S.tuned.has(k)).length;
+    return ($("#raise").value === "1" ? "Pitch correction · " : "")
+      + (key === 49 ? "A4 first" : "Temperament · F3 to F4") + " · " + done + " of " + S.order.length;
+  }
   const s = sectionFor(key);
   const lo = Math.min(s.from, s.to), hi = Math.max(s.from, s.to);
   let done = 0;
@@ -1701,6 +1823,7 @@ function nextInOrder(from){
 
 function markDone(){
   S.tuned.add(S.tuneKey);
+  S.tunedCents[S.tuneKey] = S.curve.cents[S.tuneKey - 1];
   // The reference and the stretch lock as soon as anything is tuned to them.
   $("#a4").disabled = true; $("#stretch").disabled = true; $("#bass").disabled = true;
   $("#pitchLocked").classList.remove("hidden");
@@ -1715,6 +1838,7 @@ function markDone(){
 function markTunedHere(){
   if (S.tuned.has(S.tuneKey)) return;
   S.tuned.add(S.tuneKey);
+  S.tunedCents[S.tuneKey] = S.curve.cents[S.tuneKey - 1];
   $("#a4").disabled = true; $("#stretch").disabled = true; $("#bass").disabled = true;
   $("#pitchLocked").classList.remove("hidden");
   $("#tuneStage").textContent = sectionLabel(S.tuneKey);
@@ -1796,6 +1920,7 @@ function runFollow(p){
 }
 
 function followTo(key){
+  if (!S.order.includes(key)) return;
   selectKey(key);
   centerOn(key, true);
   const name = $("#tuneNote");
@@ -2322,6 +2447,10 @@ function centerOn(k, smooth){
 
 /* A key tapped or picked: measured next in Measure mode, tuned in Tune mode. */
 function chooseKey(k){
+  if (S.mode === "tune" && S.curve && !S.order.includes(k)){
+    $("#tuneWay").textContent = keyName(k) + " is outside the temperament — measure the rest to tune it";
+    return;
+  }
   if (S.mode === "tune"){ if (S.curve){ selectKey(k); S.chosenAt = performance.now(); } }
   else measureKey(k);
   centerOn(k, true);
@@ -2351,6 +2480,26 @@ $("#btnNewPiano").addEventListener("click", () => {
   openSheet("sheetNew");
 });
 $("#btnBegin").addEventListener("click", beginNewPiano);
+$("#btnRest").addEventListener("click", measureRest);
+$("#btnRestPitch").addEventListener("click", () => { closeSheet(); measureRest(); });
+
+/* Temperament done, or not: measure every other key, A0 upward. */
+async function measureRest(){
+  if (!temperamentOnly()) return;
+  S.measuringRest = true;
+  S.plan = [];
+  for (let k = 1; k <= 88; k++) if (!usableSamples().some(s => s.key === k)) S.plan.push(k);
+  S.index = 0;
+  S.attempts = new Map();
+  stopTuningMeter();
+  S.mode = "measure";
+  S.capturedAt = performance.now();
+  savePiano();
+  refresh();
+  centerOn(currentKey(), true);
+  if (!S.running) await startMic();
+  refresh();
+}
 $("#btnHome").addEventListener("click", goHome);
 $("#btnPitch").addEventListener("click", () => {
   if (!S.curve) return;
@@ -2389,6 +2538,8 @@ $("#stretch").addEventListener("change", solve);
 $("#bass").addEventListener("change", solve);
 $("#raise").addEventListener("change", changeRaise);
 $("#raiseCap").addEventListener("change", changeRaise);
+$("#raiseBassPct").addEventListener("change", changeRaise);
+$("#raiseBassCap").addEventListener("change", changeRaise);
 $("#btnDone").addEventListener("click", markDone);
 $("#btnBack").addEventListener("click", () => {
   const i = S.order.indexOf(S.tuneKey);
